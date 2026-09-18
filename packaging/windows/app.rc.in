@@ -1,0 +1,42 @@
+// Windows resource script (configured by CMake -> app.rc).
+//
+// Two jobs:
+//   1. Embed the application icon INTO the .exe, so Explorer, the taskbar and
+//      Alt-Tab show the real icon even when the exe is copied somewhere on its
+//      own. Icon id 1 is deliberate: Explorer shows the lowest-numbered icon.
+//   2. Embed version/company metadata, which is what the "Details" tab of the
+//      file properties dialog reads, and what SmartScreen reputation is keyed
+//      against.
+
+#include <winver.h>
+
+1 ICON "@APP_ICON_ICO@"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    @VER_MAJOR@,@VER_MINOR@,@VER_PATCH@,0
+ PRODUCTVERSION @VER_MAJOR@,@VER_MINOR@,@VER_PATCH@,0
+ FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+ FILEFLAGS      0x0L
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Enstein Robots and Automations Pvt Limited"
+            VALUE "FileDescription",  "Enstein Stock Manager"
+            VALUE "FileVersion",      "@VER_STR@"
+            VALUE "InternalName",     "EnsteinStockManager"
+            VALUE "LegalCopyright",   "Copyright (C) Enstein Robots and Automations Pvt Limited"
+            VALUE "OriginalFilename", "EnsteinStockManager.exe"
+            VALUE "ProductName",      "Enstein Stock Manager"
+            VALUE "ProductVersion",   "@VER_STR@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

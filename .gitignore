@@ -1,0 +1,9 @@
+build/
+build_check/
+cmake-build*/
+*.user
+
+# Linux release build outputs and locally downloaded packaging tools
+AppDir/
+*.AppImage
+packaging/linux/linuxdeployqt-*.AppImage

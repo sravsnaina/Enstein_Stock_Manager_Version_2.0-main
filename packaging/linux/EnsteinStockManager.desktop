@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Enstein Stock Manager
+Comment=Inventory and stock management
+Exec=EnsteinStockManager
+Icon=EnsteinStockManager
+Type=Application
+Categories=Utility;Finance;
+Terminal=false
