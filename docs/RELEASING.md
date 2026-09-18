@@ -4,6 +4,11 @@ Windows binaries are produced by GitHub Actions (`.github/workflows/build.yml`).
 There is no way to build a Windows `.exe` on a Linux machine here, so the
 Windows job on the CI runner is what actually produces the shipping artifacts.
 
+This document is about *releasing*. For how each artifact is actually built —
+the exact `windeployqt`, Inno Setup, NSIS and AppImage commands, and how to
+build them by hand on your own machine — see
+**[docs/BUILDING_EXECUTABLES.md](BUILDING_EXECUTABLES.md)**.
+
 ## Cutting a release
 
 ```bash
@@ -28,6 +33,12 @@ the installer filename, and `QCoreApplication::applicationVersion()`.
 | `EnsteinStockManager-Setup-<version>.exe` | Inno Setup installer | Normal deployment. Start Menu entry, desktop icon, uninstaller, in-place upgrades. |
 | `EnsteinStockManager-Portable-<version>.exe` | Single self-extracting exe | Copy one file to a machine and double-click. No install, no admin rights. |
 | `EnsteinStockManager-Windows-<version>.zip` | The plain deployed folder | IT rollouts, or debugging what actually got bundled. |
+
+The Linux job produces one artifact, `Enstein_Stock_Manager-x86_64.AppImage`:
+a single self-contained file for Ubuntu 22.04 and newer (the runner it is
+built on sets that floor — glibc is not forward compatible). It is not
+versioned in its filename, because the job does not set the `VERSION`
+environment variable that `linuxdeploy` reads.
 
 Both `.exe` files are fully self-contained: the Qt runtime, the QML modules,
 the SQL driver plugins, `libpq` with its OpenSSL dependencies, and the MSVC
