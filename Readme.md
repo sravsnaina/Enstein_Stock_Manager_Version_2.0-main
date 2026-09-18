@@ -85,6 +85,11 @@ brew install qt@6 cmake
 
 QXlsx is vendored under `third_party/`, so there is nothing to clone.
 
+To turn the source into a **shippable executable** — a Windows `.exe` or a
+single-file Ubuntu AppImage — follow
+**[docs/BUILDING_EXECUTABLES.md](docs/BUILDING_EXECUTABLES.md)**. The build
+below produces a development binary that still needs Qt on the machine.
+
 ```bash
 # Configure  (on Windows/macOS add -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/gcc_64)
 cmake -S . -B build
@@ -163,7 +168,10 @@ target machine needs nothing preinstalled.
   it to any 64-bit Windows machine and double-click. Needs no admin rights.
 - `EnsteinStockManager-Windows-<version>.zip` — the plain deployed folder.
 
-**Linux** — `Enstein_Stock_Manager-<version>-x86_64.AppImage`. `chmod +x` it and run.
+**Linux** — `Enstein_Stock_Manager-x86_64.AppImage`. `chmod +x` it and run. It
+carries the Qt runtime, the QML modules and the SQL drivers, so nothing needs
+to be installed first (Ubuntu 22.04 or newer; `sudo apt install libfuse2` if
+the AppImage will not start).
 
 On first launch Windows SmartScreen warns about the unsigned binary; choose
 *More info -> Run anyway*. See [docs/RELEASING.md](docs/RELEASING.md) for how to
@@ -203,6 +211,7 @@ cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/gcc_64
 | [docs/DATABASE_SCHEMA.md](docs/DATABASE_SCHEMA.md) | Tables, columns and migrations |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Who owns what, and how the two halves stay in step |
 | [docs/MULTI_COMPUTER_SETUP.md](docs/MULTI_COMPUTER_SETUP.md) | Running against a shared server |
+| [docs/BUILDING_EXECUTABLES.md](docs/BUILDING_EXECUTABLES.md) | Building the Windows `.exe` and the Ubuntu AppImage, step by step |
 | [docs/RELEASING.md](docs/RELEASING.md) | Cutting a release |
 
 ## License
