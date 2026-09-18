@@ -220,6 +220,15 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Derive package version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then V="${GITHUB_REF_NAME#v}"; else V="2.1.4"; fi
+          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || V="2.1.4"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Packaging version $V"
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -238,7 +247,9 @@ jobs:
           sudo apt install -y libxcb-cursor0 libfuse2 wget file libpq5
 
       - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+                -DAPP_VERSION="${{ steps.ver.outputs.version }}"
 
       - name: Build
         run: cmake --build build -j"$(nproc)"
@@ -264,6 +275,34 @@ jobs:
 
           cp assets/app-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock.png
 
+      - name: Drop the SQL drivers this application does not use
+        run: |
+          # EXTRA_QT_PLUGINS=sqldrivers (next step) deploys EVERY driver Qt
+          # ships, and linuxdeploy-plugin-qt fails the whole build if any one of
+          # them has an unmet dependency. Qt 6.10 ships a Mimer SQL driver whose
+          # libmimerapi.so is not on the runner and never will be, so the build
+          # died with "Could not find dependency: libmimerapi.so".
+          #
+          # The application speaks exactly two drivers (src/core/dbmanager.cpp):
+          # QSQLITE for the local fallback file and QPSQL for the shared server.
+          # Removing the rest from the Qt installation before deployment is what
+          # makes this build deterministic: a future Qt can add another exotic
+          # driver without breaking the release.
+          QT_SQLDRIVERS="${QT_ROOT_DIR:-$QT_INSTALL_DIR}/plugins/sqldrivers"
+          if [ ! -d "$QT_SQLDRIVERS" ]; then
+            QT_SQLDRIVERS="$(dirname "$(dirname "$(command -v qmake)")")/plugins/sqldrivers"
+          fi
+          test -d "$QT_SQLDRIVERS" || { echo "ERROR: cannot locate Qt sqldrivers directory"; exit 1; }
+          echo "Pruning $QT_SQLDRIVERS"
+          for drv in mimer mysql odbc oci ibase db2; do
+            rm -fv "$QT_SQLDRIVERS/libqsql${drv}.so"
+          done
+          echo "Drivers kept:"
+          ls -1 "$QT_SQLDRIVERS"
+          # The two we ship must survive the prune, or the AppImage is useless.
+          test -f "$QT_SQLDRIVERS/libqsqlite.so"  || { echo 'ERROR: qsqlite driver missing'; exit 1; }
+          test -f "$QT_SQLDRIVERS/libqsqlpsql.so" || { echo 'ERROR: qsqlpsql driver missing'; exit 1; }
+
       - name: Build AppImage
         run: |
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
@@ -275,6 +314,10 @@ jobs:
           # linuxdeploy-plugin-qt does not include sqldrivers by default. Its
           # libpq.so.5 dependency is then pulled in automatically by linuxdeploy.
           export EXTRA_QT_PLUGINS="sqldrivers"
+          # linuxdeploy reads VERSION for the filename, so the AppImage carries
+          # its version the same way the Windows artifacts do: a downloaded file
+          # says what it is, and two of them can sit in one folder.
+          export VERSION="${{ steps.ver.outputs.version }}"
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --plugin qt \

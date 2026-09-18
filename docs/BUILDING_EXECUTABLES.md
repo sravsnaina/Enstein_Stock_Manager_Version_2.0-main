@@ -16,7 +16,7 @@ GitHub Releases, code signing) and defers to this file for the mechanics.
 | Windows | `EnsteinStockManager-Setup-<version>.exe` | `packaging/windows/installer.iss` (Inno Setup 6) | No |
 | Windows | `EnsteinStockManager-Portable-<version>.exe` | `packaging/windows/portable.nsi` (NSIS 3) | No |
 | Windows | `EnsteinStockManager-Windows-<version>.zip` | zip of the `windeployqt` output folder | No |
-| Ubuntu / Linux | `Enstein_Stock_Manager-x86_64.AppImage` | `packaging/linux/create_appimage.sh`, or the CI Linux job | No |
+| Ubuntu / Linux | `Enstein_Stock_Manager-<version>-x86_64.AppImage` | `packaging/linux/create_appimage.sh`, or the CI Linux job | No |
 | Any | `build/EnsteinStockManager` | `cmake --build build` | **Yes** — development binary only |
 
 The plain `build/EnsteinStockManager` is *not* shippable: it resolves the Qt
@@ -216,6 +216,20 @@ export VERSION=2.1.4                           # puts the version in the filenam
 ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage
 ```
 
+> **Qt's other SQL drivers will break the build.**
+> `EXTRA_QT_PLUGINS=sqldrivers` deploys *every* driver Qt ships, and
+> `linuxdeploy-plugin-qt` fails the whole build if any one of them has an
+> unmet dependency — Qt 6.10's Mimer driver needs `libmimerapi.so`, which no
+> ordinary machine has. The CI job therefore deletes the drivers this
+> application does not speak (`mimer`, `mysql`, `odbc`, `oci`, `ibase`, `db2`)
+> from the Qt installation before deploying, keeping only `qsqlite` and
+> `qsqlpsql`. Do the same locally if you hit
+> `Could not find dependency: libmimerapi.so`:
+>
+> ```bash
+> rm -f "$QT_ROOT_DIR"/plugins/sqldrivers/libqsql{mimer,mysql,odbc,oci,ibase,db2}.so
+> ```
+
 > **`EXTRA_QT_PLUGINS=sqldrivers` is not optional.**
 > `linuxdeploy-plugin-qt` does not bundle the SQL drivers by default. Leave it
 > out and `libqsqlpsql.so` is missing from the AppImage, the PostgreSQL
@@ -239,9 +253,9 @@ Enstein_Stock_Manager-x86_64.AppImage             # VERSION unset
 Enstein_Stock_Manager-2.1.4-x86_64.AppImage       # VERSION=2.1.4
 ```
 
-CI does not set `VERSION`, so the released file carries no version in its
-name. Set it for local builds — it saves confusion when several are lying
-around.
+CI sets `VERSION` from the git tag, so the released file is
+`Enstein_Stock_Manager-<version>-x86_64.AppImage`. Set it for local builds
+too — it saves confusion when several are lying around.
 
 ### Verify the AppImage before you hand it out
 

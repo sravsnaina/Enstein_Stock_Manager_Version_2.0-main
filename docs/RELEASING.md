@@ -34,11 +34,10 @@ the installer filename, and `QCoreApplication::applicationVersion()`.
 | `EnsteinStockManager-Portable-<version>.exe` | Single self-extracting exe | Copy one file to a machine and double-click. No install, no admin rights. |
 | `EnsteinStockManager-Windows-<version>.zip` | The plain deployed folder | IT rollouts, or debugging what actually got bundled. |
 
-The Linux job produces one artifact, `Enstein_Stock_Manager-x86_64.AppImage`:
-a single self-contained file for Ubuntu 22.04 and newer (the runner it is
-built on sets that floor — glibc is not forward compatible). It is not
-versioned in its filename, because the job does not set the `VERSION`
-environment variable that `linuxdeploy` reads.
+The Linux job produces one artifact,
+`Enstein_Stock_Manager-<version>-x86_64.AppImage`: a single self-contained
+file for Ubuntu 22.04 and newer (the runner it is built on sets that floor —
+glibc is not forward compatible).
 
 Both `.exe` files are fully self-contained: the Qt runtime, the QML modules,
 the SQL driver plugins, `libpq` with its OpenSSL dependencies, and the MSVC

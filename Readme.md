@@ -168,7 +168,7 @@ target machine needs nothing preinstalled.
   it to any 64-bit Windows machine and double-click. Needs no admin rights.
 - `EnsteinStockManager-Windows-<version>.zip` — the plain deployed folder.
 
-**Linux** — `Enstein_Stock_Manager-x86_64.AppImage`. `chmod +x` it and run. It
+**Linux** — `Enstein_Stock_Manager-<version>-x86_64.AppImage`. `chmod +x` it and run. It
 carries the Qt runtime, the QML modules and the SQL drivers, so nothing needs
 to be installed first (Ubuntu 22.04 or newer; `sudo apt install libfuse2` if
 the AppImage will not start).
