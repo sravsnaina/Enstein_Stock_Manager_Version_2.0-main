@@ -190,7 +190,7 @@ ApplicationWindow {
             rows = Backend.model.rowCount()
             root.tableRefreshToken++
             refreshPOList()
-            refreshMovements()
+            movementsDialog.refresh()
             statusTimer.restart()
         }
 
@@ -198,7 +198,7 @@ ApplicationWindow {
             statusLabel.text = "Issued: " + partName + " x" + qty + " (" + issueNo + ")"
             rows = Backend.model.rowCount()
             root.tableRefreshToken++
-            refreshMovements()
+            movementsDialog.refresh()
             refreshIssuePartDropdown()
             statusTimer.restart()
         }
@@ -2685,10 +2685,12 @@ ApplicationWindow {
     // The grid itself is read-only, so a correction goes through here: one
     // deliberate action, login-gated, with every column of the row in view.
     property int editingStockRow: -1
+    property string editingStockOriginalPartNo: ""
 
     function openStockRowEditor(row) {
         if (row <= 0 || !loginDialog.isAuthenticated) return
         editingStockRow = row
+        editingStockOriginalPartNo = (Backend.model.getData(row, 1) || "").toString()
         stockEditPartName.text = (Backend.model.getData(row, 0) || "").toString()
         stockEditPartNo.text = (Backend.model.getData(row, 1) || "").toString()
         stockEditStock.text = (Backend.model.getData(row, 2) || "").toString()
@@ -2721,6 +2723,11 @@ ApplicationWindow {
             m.setDataAt(editingStockRow, 6, stockEditVendor.text)
             m.setDataAt(editingStockRow, 7, stockEditDate.text)
             m.setDataAt(editingStockRow, 8, stockEditUnitPrice.text)
+            if (!Backend.syncStockRowToItemMaster(editingStockRow, editingStockOriginalPartNo)) {
+                statusLabel.text = "Stock row updated, but Item Master could not be updated"
+                statusTimer.restart()
+                return
+            }
             // An edit can move a part between departments or change a
             // quantity, so re-roll the totals.
             root.tableRefreshToken++
@@ -4058,7 +4065,7 @@ ApplicationWindow {
                 grnRemarksField.text, grnReceivedByField.text)
             if (grnNo !== "") {
                 refreshPOList()
-                refreshMovements()
+                movementsDialog.refresh()
                 rows = Backend.model.rowCount()
             }
         }
@@ -4237,7 +4244,7 @@ ApplicationWindow {
                 issuePartField.editText = ""
                 issueQtyField.value = 1
                 rows = Backend.model.rowCount()
-                refreshMovements()
+                movementsDialog.refresh()
             }
         }
 
@@ -4253,18 +4260,12 @@ ApplicationWindow {
 
     StockMovementsDialog {
         id: movementsDialog
-        onRefreshRequested: refreshMovements()
+        onRefreshRequested: refresh()
     }
 
     /* ================= REPORTS DIALOG ================= */
 
     ReportsDialog { id: reportsDialog }
-
-    function refreshMovements() {
-        movementsModel.clear()
-        var movements = Backend.getStockMovements(movFilterField.text)
-        for (var i = movements.length - 1; i >= 0; i--) movementsModel.append(movements[i])
-    }
 
     /* ================= LOW STOCK ALERT DIALOG ================= */
 
@@ -4512,25 +4513,44 @@ ApplicationWindow {
     /* ================= TOOLBAR ================= */
 
     header: ToolBar {
-        background: Rectangle { color: "#34495e" }
+    id: appToolbar
+    implicitHeight: 42
 
-        Flickable {
-            id: toolbarFlick
-            anchors.fill: parent
-            implicitHeight: toolbarItems.implicitHeight
-            clip: true
-            contentWidth: Math.max(width, toolbarItems.implicitWidth)
-            contentHeight: height
-            boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.HorizontalFlick
-            ScrollBar.horizontal: ScrollBar {
-                policy: ScrollBar.AsNeeded
-            }
+    background: Rectangle {
+        color: "#34495e"
+    }
 
-            RowLayout {
+    Flickable {
+        id: toolbarFlick
+
+        anchors.fill: parent
+        clip: true
+
+        contentWidth: Math.max(
+            width,
+            toolbarItems.implicitWidth
+        )
+        contentHeight: height
+
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.HorizontalFlick
+
+        ScrollBar.horizontal: ScrollBar {
+            policy: toolbarItems.implicitWidth > toolbarFlick.width
+                    ? ScrollBar.AlwaysOn
+                    : ScrollBar.AsNeeded
+        }
+
+        RowLayout {
             id: toolbarItems
-            height: parent.height
-            width: Math.max(parent.width, implicitWidth)
+
+            x: 0
+            y: 0
+            height: toolbarFlick.height
+            width: Math.max(
+                toolbarFlick.width,
+                implicitWidth
+            )
             spacing: 3
 
             // FILE OPERATIONS
