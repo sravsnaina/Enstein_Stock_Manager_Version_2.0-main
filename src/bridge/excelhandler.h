@@ -109,6 +109,7 @@ public:
                                 const QString &category,
                                 int quantity,
                                 double unitPrice);
+    Q_INVOKABLE bool syncStockRowToItemMaster(int row, const QString &originalPartNo = QString());
     Q_INVOKABLE int getNextSerialNumber() const;
 
     // ---- Authentication (backed by the shared users table) ----
@@ -346,7 +347,7 @@ public:
     // ---- Low Stock Alerts ----
     Q_INVOKABLE QVariantList getLowStockItems();
     Q_INVOKABLE int lowStockCount();
-    Q_INVOKABLE bool autoGeneratePOForLowStock();
+    Q_INVOKABLE bool autoGeneratePOForLowStock(const QVariantList &quantities = QVariantList());
 
 signals:
     void currentFileChanged();

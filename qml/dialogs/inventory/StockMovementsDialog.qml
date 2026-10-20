@@ -97,5 +97,12 @@ Dialog {
         Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: movementsDialog.close() }
     }
 
-    onOpened: { refreshRequested() }
+    function refresh() {
+        movementsModel.clear()
+        var movements = Backend.getStockMovements(movFilterField.text)
+        for (var i = movements.length - 1; i >= 0; i--)
+            movementsModel.append(movements[i])
+    }
+
+    onOpened: refresh()
 }

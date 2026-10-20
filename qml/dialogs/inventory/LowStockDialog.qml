@@ -49,6 +49,12 @@ Dialog {
                             }
                         }
                         Label { text: model.vendor ? "Vendor: " + model.vendor : "No vendor set!"; font.pixelSize: 11; color: model.vendor ? Theme.textSecondary : Theme.danger }
+                        Label { text: "Order qty:"; font.pixelSize: 11; color: Theme.textSecondary }
+                        SpinBox {
+                            from: 1; to: 100000; editable: true
+                            value: model.orderQty
+                            onValueModified: lowStockModel.setProperty(index, "orderQty", value)
+                        }
                     }
                 }
             }
@@ -63,7 +69,12 @@ Dialog {
                 highlighted: true
                 enabled: lowStockModel.count > 0
                 onClicked: {
-                    if (Backend.autoGeneratePOForLowStock()) {
+                    var quantities = []
+                    for (var i = 0; i < lowStockModel.count; ++i) {
+                        var item = lowStockModel.get(i)
+                        quantities.push({ partNo: item.partNo, partName: item.partName, qty: item.orderQty })
+                    }
+                    if (Backend.autoGeneratePOForLowStock(quantities)) {
                         statusLabel.text = "Draft PO generated for low stock items"
                         statusTimer.restart()
                         refreshRequested()
@@ -81,8 +92,11 @@ Dialog {
     function refresh() {
         lowStockModel.clear()
         var items = Backend.getLowStockItems()
-        for (var i = 0; i < items.length; ++i)
-            lowStockModel.append(items[i])
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i]
+            item.orderQty = Math.max(1, item.shortage)
+            lowStockModel.append(item)
+        }
     }
 
     onOpened: refresh()

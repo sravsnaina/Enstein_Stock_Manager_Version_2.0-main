@@ -55,7 +55,7 @@ signals:
     void listChanged();
 
 private:
-    void save();
+    bool save();
 
     QVector<QVariantMap> m_items;
 };
