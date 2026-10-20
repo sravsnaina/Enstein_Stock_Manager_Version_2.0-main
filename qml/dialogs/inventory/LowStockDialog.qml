@@ -20,7 +20,8 @@ Dialog {
     title: "Low Stock Alerts"
     modal: true
     anchors.centerIn: parent
-    width: 700; height: 500
+    width: parent ? Math.min(700, parent.width - 32) : 700
+    height: parent ? Math.min(500, parent.height - 32) : 500
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10

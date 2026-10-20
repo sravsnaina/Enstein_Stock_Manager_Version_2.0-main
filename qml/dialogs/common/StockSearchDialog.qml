@@ -18,7 +18,8 @@ Dialog {
     modal: true
     standardButtons: Dialog.Close
     anchors.centerIn: parent
-    width: 600; height: 500
+    width: parent ? Math.min(600, parent.width - 32) : 600
+    height: parent ? Math.min(500, parent.height - 32) : 500
 
     function runSearch() {
         var query = searchField.text.trim()

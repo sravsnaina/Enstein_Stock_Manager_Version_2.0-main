@@ -18,8 +18,8 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
-    width: 420
-    height: 420
+    width: parent ? Math.min(420, parent.width - 32) : 420
+    height: parent ? Math.min(420, parent.height - 32) : 420
     property int displayMonth: (new Date()).getMonth() + 1
     property int displayYear: (new Date()).getFullYear()
     property date selectedDate: new Date()

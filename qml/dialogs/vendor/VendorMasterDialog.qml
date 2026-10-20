@@ -276,6 +276,10 @@ Dialog {
         vendorListModel.clear()
         var query = (filterText || "").toString().trim().toLowerCase()
         var vendors = Backend.getVendorList()
+
+
+    console.log("========== VENDOR REFRESH ==========")
+    console.log("Backend vendor count:", vendors.length)
         for (var i = 0; i < vendors.length; i++){
             var v = vendors[i];
                 var haystack = [

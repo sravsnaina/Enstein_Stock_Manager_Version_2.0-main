@@ -18,7 +18,8 @@ Dialog {
     title: "Stock Movement History"
     modal: true
     anchors.centerIn: parent
-    width: 800; height: 600
+    width: parent ? Math.min(800, parent.width - 32) : 800
+    height: parent ? Math.min(600, parent.height - 32) : 600
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10

@@ -8,9 +8,13 @@ import Enstein
 ApplicationWindow {
     id: root
     visible: true
-    width: 1600
-    height: 900
+    width: Math.min(1600, Screen.width * 0.95)
+    height: Math.min(900, Screen.height * 0.9)
+    minimumWidth: 480
+    minimumHeight: 360
     font.pixelSize: Theme.fontSizeBody
+    // Keep layouts comfortable on tablets and small laptop windows.
+    readonly property bool compactLayout: width < 900
     // A quiet neutral canvas separates operational panels from the window and
     // gives every screen the same professional visual baseline.
     background: Rectangle { color: Theme.workspace }
@@ -85,12 +89,16 @@ ApplicationWindow {
     onSelectedDepartmentChanged: refreshStockOverview()
 
     function columnWidth(colIndex) {
-        var available = Math.max(800, tableHeader.width - 40)
+        var available = Math.max(root.compactLayout ? root.width - 40 : 800,
+                                 tableHeader.width - 40)
         var baseTotal = 0
         for (var i = 0; i < tableBaseWidths.length; i++) baseTotal += tableBaseWidths[i]
         var scale = available / baseTotal
         var width = Math.round(tableBaseWidths[colIndex] * scale)
-        return Math.max(tableMinWidths[colIndex], width)
+        var minimum = root.compactLayout
+                ? Math.round(tableMinWidths[colIndex] * 0.6)
+                : tableMinWidths[colIndex]
+        return Math.max(minimum, width)
     }
 
     title: {
@@ -328,7 +336,7 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 450
+        width: Math.min(450, root.width - 32)
 
         ColumnLayout {
             spacing: 10; width: parent.width
@@ -1388,7 +1396,7 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-        width: 560
+        width: Math.min(560, root.width - 32)
 
         ColumnLayout {
             spacing: 10
@@ -1535,8 +1543,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
-        width: 640
-        height: 520
+        width: Math.min(640, root.width - 32)
+        height: Math.min(520, root.height - 32)
 
         ColumnLayout {
             anchors.fill: parent
@@ -1618,8 +1626,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
-        width: 640
-        height: 520
+        width: Math.min(640, root.width - 32)
+        height: Math.min(520, root.height - 32)
 
         ColumnLayout {
             anchors.fill: parent
@@ -2500,7 +2508,7 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-        width: 480
+        width: Math.min(480, root.width - 32)
 
         ColumnLayout {
             anchors.fill: parent; spacing: 10
@@ -2539,7 +2547,7 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        width: 460
+        width: Math.min(460, root.width - 32)
 
         Label {
             width: parent.width
@@ -2699,7 +2707,7 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Save | Dialog.Cancel
-        width: 620
+        width: Math.min(620, root.width - 32)
 
         onAccepted: {
             if (editingStockRow <= 0) return
@@ -3648,7 +3656,7 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        width: 460
+        width: Math.min(460, root.width - 32)
 
         Label {
             width: parent.width
@@ -3993,7 +4001,7 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 470
+        width: Math.min(470, root.width - 32)
 
         ColumnLayout {
             spacing: 10; width: parent.width
@@ -4086,7 +4094,7 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 470
+        width: Math.min(470, root.width - 32)
 
         ColumnLayout {
             spacing: 10; width: parent.width
@@ -4315,7 +4323,7 @@ ApplicationWindow {
         id: cloudSettingsDialog
         title: "Database Connection"
         modal: true
-        width: 560
+        width: Math.min(560, root.width - 32)
         height: parent ? Math.min(780, parent.height - 60) : 780
         anchors.centerIn: parent
 
@@ -4506,8 +4514,24 @@ ApplicationWindow {
     header: ToolBar {
         background: Rectangle { color: "#34495e" }
 
-        RowLayout {
-            anchors.fill: parent; spacing: 3
+        Flickable {
+            id: toolbarFlick
+            anchors.fill: parent
+            implicitHeight: toolbarItems.implicitHeight
+            clip: true
+            contentWidth: Math.max(width, toolbarItems.implicitWidth)
+            contentHeight: height
+            boundsBehavior: Flickable.StopAtBounds
+            flickableDirection: Flickable.HorizontalFlick
+            ScrollBar.horizontal: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
+
+            RowLayout {
+            id: toolbarItems
+            height: parent.height
+            width: Math.max(parent.width, implicitWidth)
+            spacing: 3
 
             // FILE OPERATIONS
             // ToolButton {
@@ -4715,6 +4739,7 @@ ApplicationWindow {
                 ToolTip.visible: hovered; ToolTip.text: "Database Connection Settings"
                 contentItem: Text { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11 }
             }
+            }
         }
     }
 
@@ -4789,7 +4814,8 @@ ApplicationWindow {
             color: "#ffffff"; border.color: "#e3e7ea"
 
             RowLayout {
-                anchors.fill: parent; anchors.margins: 14; spacing: 28
+                anchors.fill: parent; anchors.margins: root.compactLayout ? 8 : 14
+                spacing: root.compactLayout ? 8 : 28
 
                 Repeater {
                     model: [
@@ -4807,7 +4833,7 @@ ApplicationWindow {
                         }
                         Label {
                             text: modelData.value
-                            font.pixelSize: 22; font.bold: true
+                            font.pixelSize: root.compactLayout ? 18 : 22; font.bold: true
                             color: "#1f2933"
                         }
                     }
@@ -4836,7 +4862,8 @@ ApplicationWindow {
             color: "#ffffff"; border.color: "#e3e7ea"
 
             RowLayout {
-                anchors.fill: parent; anchors.margins: 14; spacing: 20
+                anchors.fill: parent; anchors.margins: root.compactLayout ? 8 : 14
+                spacing: root.compactLayout ? 8 : 20
 
                 // Department list: the selector, and the exact numbers behind
                 // the ring beside it.
@@ -4879,7 +4906,7 @@ ApplicationWindow {
                                 font.pixelSize: 12; font.bold: true; color: "#1f2933"
                                 Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight
                             }
-                            Item { Layout.preferredWidth: 106 }
+                            Item { Layout.preferredWidth: root.compactLayout ? 0 : 106 }
                         }
                     }
 
@@ -4923,6 +4950,7 @@ ApplicationWindow {
                                     Label {
                                         text: modelData.parts + (modelData.parts === 1 ? " part" : " parts")
                                         font.pixelSize: 11; color: "#8a9199"
+                                        visible: !root.compactLayout
                                     }
                                     Label {
                                         text: Format.grouped(modelData.qty).replace(".00", "")
@@ -4932,6 +4960,7 @@ ApplicationWindow {
                                     // Share of total units, on a single-hue track.
                                     Rectangle {
                                         Layout.preferredWidth: 64; Layout.preferredHeight: 6
+                                        visible: !root.compactLayout
                                         radius: 3; color: "#eceff1"
                                         Rectangle {
                                             width: Math.max(2, parent.width * modelData.share)
@@ -4943,6 +4972,7 @@ ApplicationWindow {
                                         text: Math.round(modelData.share * 100) + "%"
                                         font.pixelSize: 11; color: "#5b6770"
                                         Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight
+                                        visible: !root.compactLayout
                                     }
                                 }
                             }
@@ -4956,11 +4986,15 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: "#e3e7ea" }
+                Rectangle {
+                    Layout.preferredWidth: 1; Layout.fillHeight: true; color: "#e3e7ea"
+                    visible: !root.compactLayout
+                }
 
                 // Distribution ring. Click a slice to filter, hover for the number.
                 Item {
-                    Layout.preferredWidth: 260; Layout.fillHeight: true
+                    Layout.preferredWidth: root.compactLayout ? 180 : 260
+                    Layout.fillHeight: true
 
                     Label {
                         id: donutTitle

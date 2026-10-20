@@ -22,7 +22,7 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
-    width: 380
+    width: parent ? Math.min(380, parent.width - 32) : 380
 
     ColumnLayout {
         spacing: 10

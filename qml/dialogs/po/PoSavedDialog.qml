@@ -18,7 +18,7 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     standardButtons: Dialog.Ok
-    width: 560
+    width: parent ? Math.min(560, parent.width - 32) : 560
 
     ColumnLayout {
         anchors.fill: parent

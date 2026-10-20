@@ -15,7 +15,7 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     standardButtons: Dialog.Close
-    width: 420
+    width: parent ? Math.min(420, parent.width - 32) : 420
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10
