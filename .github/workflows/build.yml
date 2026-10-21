@@ -265,19 +265,48 @@ jobs:
           cp assets/app-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock.png
 
       - name: Build AppImage
+        shell: bash
         run: |
+          set -euo pipefail
+
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
 
-          export QML_SOURCES_PATHS=$PWD
-          # Force the Qt SQL driver plugins (incl. libqsqlpsql.so) to be bundled;
-          # linuxdeploy-plugin-qt does not include sqldrivers by default. Its
-          # libpq.so.5 dependency is then pulled in automatically by linuxdeploy.
-          export EXTRA_QT_PLUGINS="sqldrivers"
+          # Scan only the application's QML directory, not third-party examples
+          # or generated files under build/.
+          export QML_SOURCES_PATHS="$PWD/qml"
+          unset EXTRA_QT_PLUGINS || true
+
+          # Deploy the Qt runtime first. Do not request every SQL driver here:
+          # that also selects Oracle (qsqloci), which fails without Oracle Client.
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
-            --plugin qt \
+            --plugin qt
+
+          # Bundle only the PostgreSQL Qt SQL driver used by this application.
+          QT_QMAKE="$(command -v qmake)"
+          if [ -z "$QT_QMAKE" ]; then
+            echo "ERROR: qmake was not found on PATH"
+            exit 1
+          fi
+          QT_PLUGIN_DIR="$(qmake -query QT_INSTALL_PLUGINS)"
+          PSQL_PLUGIN="$QT_PLUGIN_DIR/sqldrivers/libqsqlpsql.so"
+          if [ ! -f "$PSQL_PLUGIN" ]; then
+            echo "ERROR: PostgreSQL Qt SQL driver not found: $PSQL_PLUGIN"
+            exit 1
+          fi
+          mkdir -p AppDir/usr/plugins/sqldrivers
+          cp "$PSQL_PLUGIN" AppDir/usr/plugins/sqldrivers/libqsqlpsql.so
+
+          # Resolve and bundle dependencies for the PostgreSQL plugin, including libpq.
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --deploy-deps-only AppDir/usr/plugins/sqldrivers/libqsqlpsql.so
+
+          # Build the final AppImage only after the SQL driver and dependencies exist.
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
             --output appimage
 
       - name: Validate AppImage
