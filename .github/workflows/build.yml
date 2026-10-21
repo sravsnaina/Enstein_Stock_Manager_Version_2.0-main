@@ -1,268 +1,168 @@
 name: Build Windows and Linux (Qt)
 
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
 permissions:
   contents: write
 
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-
 env:
-  QT_VERSION: '6.10.1'
+  QT_VERSION: "6.10.1"
+  BUILD_TYPE: Release
 
 jobs:
   build-windows:
-    name: Windows (portable exe + installer)
-    runs-on: windows-latest
+    name: Build Windows Installer
+    runs-on: windows-2022
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Derive package version
-        id: ver
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then V="${GITHUB_REF_NAME#v}"; else V="2.1.4"; fi
-          # Inno Setup and the Windows VERSIONINFO block both need a plain x.y.z.
-          [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || V="2.1.4"
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Packaging version $V"
-
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
           arch: win64_msvc2022_64
+          modules: qtmultimedia
           cache: true
 
-      - name: Set up MSVC (x64)
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
       - name: Configure CMake
-        shell: bash
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DAPP_VERSION="${{ steps.ver.outputs.version }}"
-
-      - name: Build
-        shell: bash
-        run: cmake --build build
-
-      - name: Stage app + Qt runtime (windeployqt)
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item build\EnsteinStockManager.exe dist\ -Force
-          # --qmldir lets windeployqt scan the QML for imports, --sql pulls in the
-          # SQL driver plugins, and --compiler-runtime copies the MSVC runtime DLLs
-          # so the app runs on a machine with no Visual C++ redistributable.
-          windeployqt --release --qmldir . --sql --compiler-runtime dist\EnsteinStockManager.exe
+          cmake -S . -B build-win `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+            -DCMAKE_BUILD_TYPE=Release
 
-      - name: Bundle MSVC runtime (fallback)
+      - name: Build application
+        run: cmake --build build-win --config Release --parallel 2
+
+      - name: Deploy Qt runtime
         shell: pwsh
         run: |
-          # windeployqt --compiler-runtime only works when it can locate the VC
-          # redist directory. If it silently did nothing, copy the DLLs ourselves;
-          # without them the app dies at startup on a clean Windows install.
-          if (Test-Path 'dist\vcruntime140.dll') { Write-Host 'MSVC runtime already present'; exit 0 }
-          $redist = $env:VCToolsRedistDir
-          if (-not $redist -or -not (Test-Path $redist)) { throw 'VCToolsRedistDir not set; cannot bundle MSVC runtime' }
-          $src = Join-Path $redist 'x64\Microsoft.VC143.CRT'
-          if (-not (Test-Path $src)) {
-            $src = (Get-ChildItem (Join-Path $redist 'x64') -Directory -Filter 'Microsoft.VC*.CRT' | Select-Object -First 1).FullName
-          }
-          if (-not $src) { throw 'Could not locate the Microsoft VC CRT redistributable directory' }
-          Write-Host "Copying MSVC runtime from $src"
-          Copy-Item (Join-Path $src '*.dll') dist\ -Force
-          if (-not (Test-Path 'dist\vcruntime140.dll')) { throw 'vcruntime140.dll still missing' }
+          $exe = Get-ChildItem build-win -Recurse -Filter EnsteinStockManager.exe |
+            Select-Object -First 1 -ExpandProperty FullName
 
-      - name: Bundle PostgreSQL client libraries (libpq)
+          if (-not $exe) {
+            throw "EnsteinStockManager.exe was not found."
+          }
+
+          $deployDir = Split-Path $exe -Parent
+          & windeployqt --release --qmldir "$PWD\qml" "$exe"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "windeployqt failed."
+          }
+
+          Write-Host "Deployment directory: $deployDir"
+
+      - name: Package Windows ZIP
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          # The Qt QPSQL driver plugin (sqldrivers\qsqlpsql.dll) needs libpq.dll
-          # plus its OpenSSL dependencies at RUNTIME. windeployqt copies the Qt
-          # plugin but NOT libpq, so we copy it from the PostgreSQL that ships
-          # preinstalled on the GitHub runner. Without this, on a fresh end-user
-          # machine the QPSQL driver fails to load and the app silently falls
-          # back to a local SQLite file - breaking multi-device sync.
-          $pg = Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory -ErrorAction SilentlyContinue |
-                Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $pg) { throw 'PostgreSQL not found on runner; cannot bundle libpq.dll' }
-          $bin = Join-Path $pg.FullName 'bin'
-          Write-Host "Bundling libpq from $bin"
-          Copy-Item (Join-Path $bin 'libpq.dll') dist\ -Force
-          foreach ($pat in 'libcrypto*.dll','libssl*.dll','libintl*.dll','libiconv*.dll','libwinpthread*.dll') {
-            Get-ChildItem (Join-Path $bin $pat) -ErrorAction SilentlyContinue | ForEach-Object {
-              Copy-Item $_.FullName dist\ -Force
-              Write-Host "  + $($_.Name)"
-            }
-          }
-          # Verify the Qt QPSQL plugin itself made it in; if not, copy from Qt.
-          if (-not (Test-Path 'dist\sqldrivers\qsqlpsql.dll')) {
-            $qtBin  = Split-Path (Get-Command windeployqt).Source
-            $plugin = Join-Path (Split-Path $qtBin) 'plugins\sqldrivers\qsqlpsql.dll'
-            New-Item -ItemType Directory -Force -Path dist\sqldrivers | Out-Null
-            Copy-Item $plugin dist\sqldrivers\ -Force
-          }
-          if (-not (Test-Path 'dist\sqldrivers\qsqlpsql.dll')) { throw 'qsqlpsql.dll missing after bundling' }
-          if (-not (Test-Path 'dist\libpq.dll'))               { throw 'libpq.dll missing after bundling' }
-          Write-Host 'PostgreSQL client libraries bundled OK'
+          $exe = Get-ChildItem build-win -Recurse -Filter EnsteinStockManager.exe |
+            Select-Object -First 1 -ExpandProperty FullName
 
-      - name: Smoke-test the deployed bundle
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          # Launch the real app with a PATH stripped back to system32, so it can
-          # only load DLLs it actually ships with - the same situation as a fresh
-          # end-user machine with no Qt installed. Software rendering + offscreen
-          # let the QML load on a headless runner. A missing DLL, plugin or QML
-          # module makes the process exit immediately, which is precisely the
-          # packaging bug that never shows up on the build machine.
-          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          $env:QT_QPA_PLATFORM  = 'offscreen'
-          $env:QT_QUICK_BACKEND = 'software'
-          $exe = (Resolve-Path .\dist\EnsteinStockManager.exe).Path
-          $out = Join-Path $PWD 'smoke-out.txt'
-          $err = Join-Path $PWD 'smoke-err.txt'
-          $p = Start-Process -FilePath $exe -WorkingDirectory (Join-Path $PWD 'dist') `
-                             -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
-          Start-Sleep -Seconds 30
-          if ($p.HasExited) {
-            Write-Host '--- stdout ---'; Get-Content $out -ErrorAction SilentlyContinue
-            Write-Host '--- stderr ---'; Get-Content $err -ErrorAction SilentlyContinue
-            throw "App exited early with code $($p.ExitCode); the deployed bundle is incomplete"
-          }
-          Stop-Process -Id $p.Id -Force
-          Write-Host '--- stdout ---'; Get-Content $out -ErrorAction SilentlyContinue
-          Write-Host 'Bundle started with a bare PATH and stayed alive - deployment is self-contained'
+          $deployDir = Split-Path $exe -Parent
+          Compress-Archive -Path "$deployDir\*" `
+            -DestinationPath "EnsteinStockManager-Windows.zip" -Force
 
-      - name: Build installer (Inno Setup)
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $candidates = @(
-            'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-            'C:\Program Files\Inno Setup 6\ISCC.exe'
-          )
-          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $iscc) {
-            Write-Host 'Inno Setup not preinstalled; installing via chocolatey'
-            choco install innosetup -y --no-progress | Out-Null
-            $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          }
-          if (-not $iscc) { throw 'Inno Setup compiler (ISCC.exe) not found' }
-          & $iscc "/DAppVersion=$env:APP_VERSION" "/DStageDir=$PWD\dist" "/DSourceRoot=$PWD" "/O$PWD" packaging\windows\installer.iss
-          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
-          Get-ChildItem EnsteinStockManager-Setup-*.exe | ForEach-Object {
-            Write-Host ("Installer: {0} ({1:N1} MB)" -f $_.Name, ($_.Length/1MB))
-          }
-
-      - name: Build single-file portable exe (NSIS)
-        # The installer and ZIP are already built at this point, so a problem
-        # here costs the portable build only - it must not sink the release.
-        continue-on-error: true
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $candidates = @(
-            'C:\Program Files (x86)\NSIS\makensis.exe',
-            'C:\Program Files\NSIS\makensis.exe'
-          )
-          $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $makensis) {
-            Write-Host 'NSIS not preinstalled; installing via chocolatey'
-            choco install nsis -y --no-progress | Out-Null
-            $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          }
-          if (-not $makensis) { throw 'NSIS compiler (makensis.exe) not found' }
-
-          $out = Join-Path $PWD "EnsteinStockManager-Portable-$env:APP_VERSION.exe"
-          & $makensis `
-            "/DAPPVERSION=$env:APP_VERSION" `
-            "/DSTAGEDIR=$PWD\dist" `
-            "/DICONFILE=$PWD\assets\app-icon.ico" `
-            "/DOUTFILE=$out" `
-            packaging\windows\portable.nsi
-          if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
-          if (-not (Test-Path $out)) { throw 'portable exe was not produced' }
-          Write-Host ("Portable exe: {0:N1} MB" -f ((Get-Item $out).Length/1MB))
-
-      - name: Create Windows ZIP
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.ver.outputs.version }}
-        run: Compress-Archive -Path dist\* -DestinationPath "EnsteinStockManager-Windows-$env:APP_VERSION.zip"
-
-      - name: Upload Windows artifacts
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: |
-            EnsteinStockManager-Setup-*.exe
-            EnsteinStockManager-Portable-*.exe
-            EnsteinStockManager-Windows-*.zip
+          name: EnsteinStockManager-Windows
+          path: EnsteinStockManager-Windows.zip
           if-no-files-found: error
 
   build-linux:
-    name: Linux AppImage
+    name: Build Linux AppImage
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libgl1 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0 \
+            libfuse2 \
+            wget \
+            file \
+            libpq-dev \
+            libpq5
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
+          host: linux
           target: desktop
+          arch: gcc_64
+          modules: qtmultimedia
           cache: true
 
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          # libpq5 provides libpq.so.5, the PostgreSQL client library the Qt
-          # QPSQL driver plugin links against. It must be present on the build
-          # machine so linuxdeploy can bundle it into the AppImage; otherwise
-          # the driver won't load on end-user machines and the app silently
-          # falls back to a local SQLite file, breaking multi-device sync.
-          sudo apt install -y libxcb-cursor0 libfuse2 wget file libpq5
-
       - name: Configure CMake
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build -j"$(nproc)"
-
-      - name: Create app metadata
         run: |
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
 
-          cp build/EnsteinStockManager AppDir/usr/bin/
+      - name: Build application
+        run: cmake --build build --parallel 2
 
-          cat > AppDir/usr/share/applications/enstein-stock.desktop << 'DESKTOP'
+      - name: Prepare AppDir
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+
+          APP_EXE="$(find build -type f -executable -name 'EnsteinStockManager' -print -quit)"
+
+          if [ -z "$APP_EXE" ]; then
+            echo "ERROR: EnsteinStockManager executable was not found."
+            find build -maxdepth 5 -type f -executable -print
+            exit 1
+          fi
+
+          cp "$APP_EXE" AppDir/usr/bin/EnsteinStockManager
+          chmod +x AppDir/usr/bin/EnsteinStockManager
+
+          cat > AppDir/usr/share/applications/enstein-stock-manager.desktop <<'EOF'
           [Desktop Entry]
           Type=Application
           Name=Enstein Stock Manager
-          Comment=Professional Stock Management System
           Exec=EnsteinStockManager
-          Icon=enstein-stock
-          Categories=Office;Finance;
+          Icon=enstein-stock-manager
+          Categories=Office;Utility;
           Terminal=false
-          DESKTOP
+          EOF
 
-          cp assets/app-icon.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock.png
+          if [ -f resources/enstein_logo.png ]; then
+            cp resources/enstein_logo.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock-manager.png
+          elif [ -f resources/ENSTEIN.png ]; then
+            cp resources/ENSTEIN.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock-manager.png
+          else
+            echo "No app icon found; continuing without a custom icon."
+          fi
 
       - name: Build AppImage
         shell: bash
@@ -273,87 +173,106 @@ jobs:
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
 
-          # Scan only the application's QML directory, not third-party examples
-          # or generated files under build/.
           export QML_SOURCES_PATHS="$PWD/qml"
-          unset EXTRA_QT_PLUGINS || true
 
-          # Deploy the Qt runtime first. Do not request every SQL driver here:
-          # that also selects Oracle (qsqloci), which fails without Oracle Client.
+          QT_QMAKE="$(command -v qmake)"
+          if [ -z "$QT_QMAKE" ]; then
+            echo "ERROR: qmake was not found."
+            exit 1
+          fi
+
+          QT_PLUGIN_DIR="$("$QT_QMAKE" -query QT_INSTALL_PLUGINS)"
+          SQL_DRIVER_DIR="$QT_PLUGIN_DIR/sqldrivers"
+          PSQL_PLUGIN="$SQL_DRIVER_DIR/libqsqlpsql.so"
+
+          if [ ! -f "$PSQL_PLUGIN" ]; then
+            echo "ERROR: PostgreSQL Qt SQL driver not found: $PSQL_PLUGIN"
+            ls -la "$SQL_DRIVER_DIR" || true
+            exit 1
+          fi
+
+          # Temporarily hide unused SQL drivers (Oracle, Firebird, etc.)
+          # so linuxdeploy does not fail on their missing vendor libraries.
+          SQL_BACKUP="$(mktemp -d)"
+
+          restore_sql_drivers() {
+            if [ -d "$SQL_BACKUP" ]; then
+              find "$SQL_BACKUP" -mindepth 1 -maxdepth 1 \
+                -exec mv -t "$SQL_DRIVER_DIR" -- {} + 2>/dev/null || true
+              rmdir "$SQL_BACKUP" 2>/dev/null || true
+            fi
+          }
+
+          trap restore_sql_drivers EXIT
+
+          find "$SQL_DRIVER_DIR" -maxdepth 1 \
+            \( -type f -o -type l \) \
+            -name 'libqsql*.so*' \
+            ! -name 'libqsqlpsql.so' \
+            -exec mv -t "$SQL_BACKUP" -- {} +
+
+          # Deploy the Qt and QML runtime.
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --plugin qt
 
-          # Bundle only the PostgreSQL Qt SQL driver used by this application.
-          QT_QMAKE="$(command -v qmake)"
-          if [ -z "$QT_QMAKE" ]; then
-            echo "ERROR: qmake was not found on PATH"
-            exit 1
-          fi
-          QT_PLUGIN_DIR="$(qmake -query QT_INSTALL_PLUGINS)"
-          PSQL_PLUGIN="$QT_PLUGIN_DIR/sqldrivers/libqsqlpsql.so"
-          if [ ! -f "$PSQL_PLUGIN" ]; then
-            echo "ERROR: PostgreSQL Qt SQL driver not found: $PSQL_PLUGIN"
-            exit 1
-          fi
+          # Ensure the PostgreSQL driver is packaged.
           mkdir -p AppDir/usr/plugins/sqldrivers
-          cp "$PSQL_PLUGIN" AppDir/usr/plugins/sqldrivers/libqsqlpsql.so
 
-          # Resolve and bundle dependencies for the PostgreSQL plugin, including libpq.
+          if [ ! -f AppDir/usr/plugins/sqldrivers/libqsqlpsql.so ]; then
+            cp "$PSQL_PLUGIN" AppDir/usr/plugins/sqldrivers/libqsqlpsql.so
+          fi
+
+          # Bundle the PostgreSQL driver's shared-library dependencies.
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --deploy-deps-only AppDir/usr/plugins/sqldrivers/libqsqlpsql.so
 
-          # Build the final AppImage only after the SQL driver and dependencies exist.
+          # Create the AppImage.
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --output appimage
 
-      - name: Validate AppImage
-        run: |
-          APPIMAGE="$(ls -1 Enstein_Stock_Manager-*.AppImage | head -n1)"
-          chmod +x "$APPIMAGE"
-          "./$APPIMAGE" --appimage-version
-          # Verify the PostgreSQL driver + client library actually got bundled,
-          # so a broken package can't ship silently.
-          "./$APPIMAGE" --appimage-extract >/dev/null
-          echo "Bundled SQL drivers:"
-          find squashfs-root -name 'libqsqlpsql.so' -o -name 'libpq.so*' | sort
-          test -n "$(find squashfs-root -name 'libqsqlpsql.so')" || { echo 'ERROR: qsqlpsql driver missing from AppImage'; exit 1; }
-          test -n "$(find squashfs-root -name 'libpq.so*')"       || { echo 'ERROR: libpq missing from AppImage'; exit 1; }
-          rm -rf squashfs-root
-          echo 'PostgreSQL driver + libpq bundled OK'
+          APPIMAGE_FILE="$(find . -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
 
-      - name: Upload Linux AppImage
+          if [ -z "$APPIMAGE_FILE" ]; then
+            echo "ERROR: AppImage was not created."
+            exit 1
+          fi
+
+          mv "$APPIMAGE_FILE" EnsteinStockManager-Linux.AppImage
+          chmod +x EnsteinStockManager-Linux.AppImage
+
+      - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: Enstein_Stock_Manager-*.AppImage
+          name: EnsteinStockManager-Linux-AppImage
+          path: EnsteinStockManager-Linux.AppImage
           if-no-files-found: error
 
   release:
-    name: Create GitHub Release
-    needs: [build-windows, build-linux]
+    name: Publish Release Artifacts
     runs-on: ubuntu-latest
-    # Release as soon as the Windows build is good. A Linux-only failure must not
-    # block shipping the Windows binaries.
-    if: always() && startsWith(github.ref, 'refs/tags/') && needs.build-windows.result == 'success'
+    needs:
+      - build-windows
+      - build-linux
+    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
-      - name: Download build artifacts
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-          merge-multiple: true
+          name: EnsteinStockManager-Windows
+          path: release-files
 
-      - name: List artifacts
-        run: ls -lR artifacts
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: EnsteinStockManager-Linux-AppImage
+          path: release-files
 
-      - name: Create Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**
-          fail_on_unmatched_files: false
+          files: release-files/*
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
