@@ -140,9 +140,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/bin \
+            AppDir/usr/share/applications \
+            AppDir/usr/share/icons/hicolor/256x256/apps
 
-          APP_EXE="$(find build -type f -executable -name 'EnsteinStockManager' -print -quit)"
+          APP_EXE="$(find build -type f -executable \
+            -name 'EnsteinStockManager' -print -quit)"
 
           if [ -z "$APP_EXE" ]; then
             echo "ERROR: EnsteinStockManager executable was not found."
@@ -163,14 +166,35 @@ jobs:
           Terminal=false
           EOF
 
-          if [ -f resources/enstein_logo.png ]; then
-            cp resources/enstein_logo.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock-manager.png
-          elif [ -f resources/ENSTEIN.png ]; then
-            cp resources/ENSTEIN.png AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock-manager.png
-          else
-            echo "No app icon found; continuing without a custom icon."
+          # Find the application logo.
+          ICON_SOURCE=""
+
+          for candidate in \
+            qml/brand/ENSTEIN.png \
+            resources/enstein_logo.png \
+            resources/ENSTEIN.png
+          do
+            if [ -f "$candidate" ]; then
+              ICON_SOURCE="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$ICON_SOURCE" ]; then
+            echo "ERROR: Application logo not found."
+            find . -type f \( -iname "*.png" -o -iname "*.svg" \) \
+              -not -path "./build/*" \
+              -not -path "./AppDir/*"
+            exit 1
           fi
 
+          cp "$ICON_SOURCE" \
+            AppDir/usr/share/icons/hicolor/256x256/apps/enstein-stock-manager.png
+
+          # Also copy the icon to the AppDir root for linuxdeploy.
+          cp "$ICON_SOURCE" AppDir/enstein-stock-manager.png
+
+          echo "Application icon copied from: $ICON_SOURCE"
       - name: Build AppImage
         shell: bash
         run: |
