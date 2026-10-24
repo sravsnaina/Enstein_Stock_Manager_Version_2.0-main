@@ -18,6 +18,7 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Ok
     width: parent ? Math.min(560, parent.width - 32) : 560
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
 
     ColumnLayout {
         anchors.fill: parent

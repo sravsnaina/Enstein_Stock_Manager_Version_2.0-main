@@ -29,7 +29,7 @@ Dialog {
     // window: the fields scroll inside rather than pushing the OK and
     // Cancel buttons off the bottom edge.
     width: Math.min(App.windowWidth - 120, 1100)
-    height: Math.min(App.windowHeight - 120, 520)
+    height: Math.max(1, Math.min(App.windowHeight - 32, 520))
 
     ColumnLayout {
         anchors.fill: parent

@@ -17,6 +17,7 @@ Dialog {
     standardButtons: Dialog.Ok
     anchors.centerIn: parent
     width: parent ? Math.min(400, parent.width - 32) : 400
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
     property alias errorText: errorLabel.text
     Label { id: errorLabel; wrapMode: Text.WordWrap; width: parent.width }
 }

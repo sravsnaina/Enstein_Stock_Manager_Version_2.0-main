@@ -28,11 +28,18 @@ Dialog {
     // Takes most of the window instead of a fixed 700x600. The vendor list
     // is what people scan and search, so it gets every pixel the entry form
     // above does not need.
-    width: Math.min(root.width - 80, 1240)
-    height: Math.min(root.height - 80, 860)
+    width: Math.max(1, Math.min(App.windowWidth - 32, 1240))
+    height: Math.max(1, Math.min(App.windowHeight - 32, 860))
 
-    ColumnLayout {
-        anchors.fill: parent; spacing: 10
+    ScrollView {
+        id: vendorMasterScroll
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        ColumnLayout {
+            width: vendorMasterScroll.availableWidth
+            spacing: 10
 
         Label { text: "Vendor Master"; font.bold: true; font.pixelSize: 16; color: Theme.textPrimary }
 
@@ -73,7 +80,7 @@ Dialog {
                     ColumnLayout {
                         id: addressSection; anchors.fill: parent; anchors.margins: 8; spacing: 6
                         Label { text: "REGISTERED ADDRESS"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary }
-                        TextArea { id: vendorAddressField; Layout.fillWidth: true; Layout.preferredHeight: 72; placeholderText: "Building, street, locality, city, state and PIN code"; wrapMode: TextEdit.Wrap; selectByMouse: true }
+                        TextArea { id: vendorAddressField; Layout.fillWidth: true; Layout.preferredHeight: 72 * App.dialogScale; placeholderText: "Building, street, locality, city, state and PIN code"; wrapMode: TextEdit.Wrap; selectByMouse: true }
                     }
                 }
 
@@ -187,13 +194,15 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.preferredHeight: Math.max(150, Math.min(App.windowHeight * 0.32, 280))
             border.color: Theme.border; radius: 5
 
             ListView {
                 id: vendorListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                 model: ListModel { id: vendorListModel }
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 delegate: Rectangle {
-                    width: vendorListView.width - 10; height: 50
+                    width: vendorListView.width - 10; height: 50 * App.dialogScale
                     color: "#fff"; border.color: Theme.borderSubtle; radius: 4
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 8
@@ -260,6 +269,7 @@ Dialog {
         }
 
         Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: close() }
+        }
     }
 
     onOpened: {

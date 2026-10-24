@@ -21,7 +21,7 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     width: parent ? Math.min(700, parent.width - 32) : 700
-    height: parent ? Math.min(500, parent.height - 32) : 500
+    height: Math.max(1, Math.min(500, App.windowHeight - 32))
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10
@@ -36,7 +36,7 @@ Dialog {
                 id: lowStockListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                 model: ListModel { id: lowStockModel }
                 delegate: Rectangle {
-                    width: lowStockListView.width - 10; height: 60
+                    width: lowStockListView.width - 10; height: 60 * App.dialogScale
                     color: "#fff5f5"; border.color: Theme.danger; border.width: 1; radius: 4
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 8

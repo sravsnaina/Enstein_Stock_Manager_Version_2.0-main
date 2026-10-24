@@ -15,6 +15,7 @@ Dialog {
     modal: true
     standardButtons: Dialog.Ok | Dialog.Cancel
     anchors.centerIn: parent
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
     property bool isAuthenticated: false
 
     ColumnLayout {

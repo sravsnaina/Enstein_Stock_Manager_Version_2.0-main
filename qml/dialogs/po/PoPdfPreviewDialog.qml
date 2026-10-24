@@ -15,7 +15,7 @@ Dialog {
     property var poNo
     property var pages
     property var pdfPath
-
+    property alias commentsText: poPreviewCommentsField.text
     // Raised for Main.qml to act on: this dialog does not know
     // what else has to happen afterwards.
     signal refreshRequested()
@@ -24,8 +24,10 @@ Dialog {
     title: "Purchase Order " + poNo
     modal: true
     anchors.centerIn: parent
-    width: Math.min(App.windowWidth - 80, 940)
-    height: Math.min(App.windowHeight - 60, 900)
+    // Keep the popup within the app window even when the window is narrow or
+    // docked beside another app.
+    width: Math.max(1, Math.min(App.windowWidth - 32, 940))
+    height: Math.max(1, Math.min(App.windowHeight - 32, 900))
     standardButtons: Dialog.NoButton
 
     ColumnLayout {
@@ -62,8 +64,14 @@ Dialog {
                 model: pages
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
+                // Fit a complete A4 page in the available preview height when
+                // the window is short, while still using the available width
+                // on larger screens.
+                readonly property real pageWidth: Math.max(1, Math.min(width - 20, Math.max(1, height - 20) * 210 / 297))
+
                 delegate: Rectangle {
-                    width: poPreviewView.width - 20
+                    width: poPreviewView.pageWidth
+                    x: (poPreviewView.width - width) / 2
                     // A4 aspect ratio, so the page keeps its proportions
                     // whatever the dialog is resized to.
                     height: width * 297 / 210
@@ -82,9 +90,12 @@ Dialog {
             }
         }
 
-        RowLayout {
+        GridLayout {
+            id: previewActions
             Layout.fillWidth: true
-            spacing: 8
+            columns: width < 560 ? 2 : 5
+            rowSpacing: 8
+            columnSpacing: 8
 
             Label {
                 text: pages.length + (pages.length === 1 ? " page" : " pages")
@@ -96,14 +107,17 @@ Dialog {
 
             Button {
                 text: "Open in PDF viewer"
+                Layout.fillWidth: previewActions.width < 560
                 onClicked: Backend.openInSystemViewer(pdfPath)
             }
             Button {
                 text: "Close"
+                Layout.fillWidth: previewActions.width < 560
                 onClicked: poPdfPreviewDialog.close()
             }
             Button {
                 text: "Send"
+                Layout.fillWidth: previewActions.width < 560
                 highlighted: true
                 ToolTip.visible: hovered
                 ToolTip.text: "Save this purchase order as a PDF on this computer"

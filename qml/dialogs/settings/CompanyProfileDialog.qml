@@ -16,6 +16,7 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
     width: Math.min(App.windowWidth - 120, 760)
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
 
     // These details head every printed purchase order, so they are worth
     // filling in once before sending anything to a vendor.
@@ -46,8 +47,15 @@ Dialog {
         statusTimer.restart()
     }
 
-    ColumnLayout {
-        anchors.fill: parent; spacing: 8
+    ScrollView {
+        id: companyProfileScroll
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        ColumnLayout {
+            width: companyProfileScroll.availableWidth
+            spacing: 8 * App.dialogScale
 
         Rectangle {
             Layout.fillWidth: true; implicitHeight: companyIdentitySection.implicitHeight + 16
@@ -91,6 +99,7 @@ Dialog {
                     Label { text: "Website:" } TextField { id: companyWebsiteField; Layout.fillWidth: true; Layout.columnSpan: 1; placeholderText: "www.example.com"; selectByMouse: true }
                 }
             }
+        }
         }
     }
 }

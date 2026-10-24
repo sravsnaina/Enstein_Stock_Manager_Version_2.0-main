@@ -23,6 +23,7 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
     width: parent ? Math.min(380, parent.width - 32) : 380
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
 
     ColumnLayout {
         spacing: 10
