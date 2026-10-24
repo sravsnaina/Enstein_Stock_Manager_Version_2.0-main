@@ -18,7 +18,8 @@ Dialog {
     modal: true
     standardButtons: Dialog.Close
     anchors.centerIn: parent
-    width: 600; height: 500
+    width: parent ? Math.min(600, parent.width - 32) : 600
+    height: Math.max(1, Math.min(500, App.windowHeight - 32))
 
     function runSearch() {
         var query = searchField.text.trim()
@@ -59,7 +60,7 @@ Dialog {
                 id: searchResultsList; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 5
                 model: ListModel { id: searchResultsModel }
                 delegate: Rectangle {
-                    width: searchResultsList.width - 10; height: 60; color: "white"
+                    width: searchResultsList.width - 10; height: 60 * App.dialogScale; color: "white"
                     border.color: Theme.info; border.width: 1; radius: 5
                     ColumnLayout {
                         anchors.fill: parent; anchors.margins: 8; spacing: 2

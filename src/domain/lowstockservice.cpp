@@ -87,9 +87,36 @@ QVariantList LowStockService::items()
         e["stock"]       = stock;
         e["requiredQty"] = required;
         e["onOrder"]     = ordered;
-        e["shortage"]    = qMax(0, required - stock - ordered);
+        int shortage = qMax(0, required - stock - ordered);
+        // Legacy/stock-only items can have no reorder quantity configured.
+        // Since an empty shelf still raises an alert, give it a one-unit
+        // starter order when there is no incoming stock to cover it.
+        if (stock == 0 && required == 0 && ordered == 0)
+            shortage = 1;
+        e["shortage"]    = shortage;
         const QString preferredVendor = item["vendor"].toString().trimmed();
         QString vendor = preferredVendor.isEmpty() ? stockVendor : preferredVendor;
+        // Vendor Master can classify suppliers by department/item category.
+        // Use that mapping only when it identifies exactly one supplier; an
+        // ambiguous match must never silently choose the wrong vendor.
+        if (vendor.isEmpty() && m_vendors) {
+            const QString department = item.value("department", item.value("category"))
+                                          .toString().trimmed();
+            QStringList matches;
+            for (const QVariant &vendorValue : m_vendors->list()) {
+                const QVariantMap candidate = vendorValue.toMap();
+                const QString vendorDepartment = candidate.value("department").toString().trimmed();
+                const QString itemCategory = candidate.value("itemCategory").toString().trimmed();
+                if (!department.isEmpty()
+                    && (vendorDepartment.compare(department, Qt::CaseInsensitive) == 0
+                        || itemCategory.compare(department, Qt::CaseInsensitive) == 0)) {
+                    const QString name = candidate.value("vendorName").toString().trimmed();
+                    if (!name.isEmpty() && !matches.contains(name, Qt::CaseInsensitive))
+                        matches.append(name);
+                }
+            }
+            if (matches.size() == 1) vendor = matches.constFirst();
+        }
         // A one-vendor installation has an unambiguous default.  This helps
         // legacy stock and item rows that were entered before vendor linking
         // was available, without guessing when several suppliers exist.
@@ -109,7 +136,7 @@ int LowStockService::count()
     return items().size();
 }
 
-bool LowStockService::autoGeneratePO()
+bool LowStockService::autoGeneratePO(const QVariantList &quantities)
 {
     const QVariantList low = items();
     if (low.isEmpty()) {
@@ -120,42 +147,60 @@ bool LowStockService::autoGeneratePO()
     // One multi-item PO covering every shortage; each line uses the part's
     // preferred vendor from the Item Master.
     QVariantList items;
-    QStringList skipped;
+    QStringList missingVendor;
     for (const QVariant &v : low) {
         const QVariantMap e = v.toMap();
         // A zero-stock legacy item with no reorder level is deliberately
         // displayed as an alert, but cannot safely be turned into a PO until
         // its required quantity is configured in Item Master.
         if (e["shortage"].toInt() <= 0) {
-            skipped << e["partName"].toString();
             continue;
         }
         if (e["vendor"].toString().trimmed().isEmpty()) {
-            skipped << e["partName"].toString();
+            missingVendor << e["partName"].toString();
             continue;
         }
+        int orderQty = e["shortage"].toInt();
+        for (const QVariant &quantityValue : quantities) {
+            const QVariantMap requested = quantityValue.toMap();
+            const QString requestedPartNo = requested.value("partNo").toString().trimmed();
+            const bool matches = !requestedPartNo.isEmpty()
+                ? requestedPartNo.compare(e["partNo"].toString().trimmed(), Qt::CaseInsensitive) == 0
+                : requested.value("partName").toString().trimmed().compare(
+                      e["partName"].toString().trimmed(), Qt::CaseInsensitive) == 0;
+            if (matches) {
+                const int requestedQty = requested.value("qty").toInt();
+                if (requestedQty > 0) orderQty = requestedQty;
+                break;
+            }
+        }
+        if (orderQty <= 0) continue;
+
         QVariantMap line;
         line["partName"]  = e["partName"];
         line["partNo"]    = e["partNo"];
         line["vendor"]    = e["vendor"];
-        line["qty"]       = e["shortage"];
+        line["qty"]       = orderQty;
         line["unitPrice"] = e["unitPrice"];
         items.append(line);
     }
 
     if (items.isEmpty()) {
-        emit errorOccurred("Low stock items have no preferred vendor in Item Master: " +
-                           skipped.join(", "));
+        if (!missingVendor.isEmpty())
+            emit errorOccurred("Set a preferred vendor for these low-stock items in Item Master: " +
+                               missingVendor.join(", "));
+        else
+            emit errorOccurred("No low-stock item has a positive shortage to order");
         return false;
     }
 
     const QString expected = QDateTime::currentDateTime().addDays(7).toString("yyyy-MM-dd");
-    const QString poNo = m_po->createWithItems(items, expected, m_session->currentUser());
+    const QString poNo = m_po->createWithItems(items, expected, expected, m_session->currentUser());
     if (poNo.isEmpty()) return false;
 
-    if (!skipped.isEmpty())
-        emit errorOccurred("PO " + poNo + " created. Skipped (no vendor in Item Master): " +
-                           skipped.join(", "));
+    if (!missingVendor.isEmpty())
+        emit errorOccurred("PO " + poNo + " created. Set a preferred vendor in Item Master for: " +
+                           missingVendor.join(", "));
 
     qDebug() << "Auto-generated" << poNo << "for" << items.size() << "low stock items";
     return true;

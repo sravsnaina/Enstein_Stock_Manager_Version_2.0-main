@@ -40,7 +40,7 @@ public:
 
     // Raises one draft order covering every shortage, grouped by preferred
     // vendor. False when there is nothing to order.
-    bool autoGeneratePO();
+    bool autoGeneratePO(const QVariantList &quantities = QVariantList());
 
 private:
     ItemMasterService *m_itemMaster;

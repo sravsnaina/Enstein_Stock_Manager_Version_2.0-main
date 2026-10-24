@@ -22,8 +22,8 @@ Dialog {
     title: "Delivery Challan " + dcNo
     modal: true
     anchors.centerIn: parent
-    width: Math.min(App.windowWidth - 80, 940)
-    height: Math.min(App.windowHeight - 60, 900)
+    width: Math.max(1, Math.min(App.windowWidth - 32, 940))
+    height: Math.max(1, Math.min(App.windowHeight - 32, 900))
     standardButtons: Dialog.NoButton
 
     ColumnLayout {

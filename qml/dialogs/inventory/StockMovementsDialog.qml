@@ -18,7 +18,8 @@ Dialog {
     title: "Stock Movement History"
     modal: true
     anchors.centerIn: parent
-    width: 800; height: 600
+    width: parent ? Math.min(800, parent.width - 32) : 800
+    height: Math.max(1, Math.min(600, App.windowHeight - 32))
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10
@@ -41,7 +42,7 @@ Dialog {
 
             // Header
             Rectangle {
-                id: movHeader; width: parent.width; height: 30; color: Theme.textPrimary
+                id: movHeader; width: parent.width; height: 30 * App.dialogScale; color: Theme.textPrimary
                 Row {
                     anchors.fill: parent; spacing: 0
                     Repeater {
@@ -51,8 +52,8 @@ Dialog {
                             {text: "Reference", w: 200}, {text: "Done By", w: 110}
                         ]
                         Rectangle {
-                            width: modelData.w; height: 30; color: "transparent"
-                            Text { anchors.centerIn: parent; text: modelData.text; color: "white"; font.bold: true; font.pixelSize: 11 }
+                            width: modelData.w; height: 30 * App.dialogScale; color: "transparent"
+                            Text { anchors.centerIn: parent; text: modelData.text; color: "white"; font.bold: true; font.pixelSize: 11 * App.dialogScale }
                         }
                     }
                 }
@@ -65,16 +66,16 @@ Dialog {
                 anchors.margins: 2; clip: true; spacing: 1
                 model: ListModel { id: movementsModel }
                 delegate: Rectangle {
-                    width: movListView.width; height: 30
+                    width: movListView.width; height: 30 * App.dialogScale
                     color: index % 2 === 0 ? "#fff" : Theme.surfaceAlt
                     Row {
                         anchors.fill: parent; spacing: 0
-                        Rectangle { width: 150; height: 30; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.date; font.pixelSize: 11 } }
-                        Rectangle { width: 180; height: 30; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.partName; font.pixelSize: 11; font.bold: true } }
+                        Rectangle { width: 150; height: 30 * App.dialogScale; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.date; font.pixelSize: 11 * App.dialogScale } }
+                        Rectangle { width: 180; height: 30 * App.dialogScale; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.partName; font.pixelSize: 11 * App.dialogScale; font.bold: true } }
                         Rectangle {
-                            width: 80; height: 30; color: "transparent"
+                            width: 80; height: 30 * App.dialogScale; color: "transparent"
                             Text {
-                                anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.type; font.pixelSize: 11; font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.type; font.pixelSize: 11 * App.dialogScale; font.bold: true
                                 color: {
                                     if (model.type === "IN") return Theme.success
                                     if (model.type === "OUT") return Theme.danger
@@ -83,9 +84,9 @@ Dialog {
                                 }
                             }
                         }
-                        Rectangle { width: 60; height: 30; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.qty; font.pixelSize: 11; font.bold: true } }
-                        Rectangle { width: 200; height: 30; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.reference; font.pixelSize: 11; color: Theme.textSecondary } }
-                        Rectangle { width: 110; height: 30; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.doneBy; font.pixelSize: 11 } }
+                        Rectangle { width: 60; height: 30 * App.dialogScale; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.qty; font.pixelSize: 11 * App.dialogScale; font.bold: true } }
+                        Rectangle { width: 200; height: 30 * App.dialogScale; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.reference; font.pixelSize: 11 * App.dialogScale; color: Theme.textSecondary } }
+                        Rectangle { width: 110; height: 30 * App.dialogScale; color: "transparent"; Text { anchors.verticalCenter: parent.verticalCenter; x: 5; text: model.doneBy; font.pixelSize: 11 * App.dialogScale } }
                     }
                 }
             }
@@ -96,5 +97,12 @@ Dialog {
         Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: movementsDialog.close() }
     }
 
-    onOpened: { refreshRequested() }
+    function refresh() {
+        movementsModel.clear()
+        var movements = Backend.getStockMovements(movFilterField.text)
+        for (var i = movements.length - 1; i >= 0; i--)
+            movementsModel.append(movements[i])
+    }
+
+    onOpened: refresh()
 }

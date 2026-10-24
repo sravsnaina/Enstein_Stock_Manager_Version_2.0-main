@@ -15,7 +15,8 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     standardButtons: Dialog.Close
-    width: 420
+    width: parent ? Math.min(420, parent.width - 32) : 420
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
 
     ColumnLayout {
         anchors.fill: parent; spacing: 10

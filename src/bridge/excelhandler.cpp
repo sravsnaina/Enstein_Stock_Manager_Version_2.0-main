@@ -449,7 +449,7 @@ QVariantList ExcelHandler::getIssueNotes()                   { return m_issues->
 
 QVariantList ExcelHandler::getLowStockItems()          { return m_lowStock->items(); }
 int ExcelHandler::lowStockCount()                      { return m_lowStock->count(); }
-bool ExcelHandler::autoGeneratePOForLowStock()         { return m_lowStock->autoGeneratePO(); }
+bool ExcelHandler::autoGeneratePOForLowStock(const QVariantList &quantities) { return m_lowStock->autoGeneratePO(quantities); }
 
 // ==================== Helper: Find Part Row ====================
 
@@ -1399,7 +1399,58 @@ void ExcelHandler::addNewItem(const QString &partName, const QString &category,
         logStockMovement(partName, "PN-" + QString::number(newRow), "IN", quantity, "New Item", m_session->currentUser());
     }
 
+    // Stock items are also catalogue items. Keep the Item Master in step
+    // with either the newly-created row or the existing row whose stock was
+    // increased.
+    syncStockRowToItemMaster(existingRow != -1 ? existingRow : m_model->rowCount() - 1);
+
     emit lowStockCountChanged();
+}
+
+bool ExcelHandler::syncStockRowToItemMaster(int row, const QString &originalPartNo)
+{
+    if (!m_items || !m_model || row <= 0 || row >= m_model->rowCount()) return false;
+
+    const QString partName = m_model->getData(row, 0).toString().trimmed();
+    const QString partNo = m_model->getData(row, 1).toString().trimmed();
+    const QString department = m_model->getData(row, 3).toString().trimmed();
+    const QString vendor = m_model->getData(row, 6).toString().trimmed();
+    const double unitPrice = m_model->getData(row, 8).toDouble();
+    if (partName.isEmpty() || partNo.isEmpty()) return false;
+
+    QVariantMap existing;
+    QString matchedPartNo;
+    for (const QVariantMap &item : m_items->rows()) {
+        const QString itemPartNo = item.value("partNo").toString().trimmed();
+        if (itemPartNo.compare(originalPartNo.trimmed(), Qt::CaseInsensitive) == 0
+            || itemPartNo.compare(partNo, Qt::CaseInsensitive) == 0) {
+            existing = item;
+            matchedPartNo = itemPartNo;
+            if (!originalPartNo.isEmpty()
+                && itemPartNo.compare(originalPartNo.trimmed(), Qt::CaseInsensitive) == 0)
+                break;
+        }
+    }
+
+    QVariantMap item = existing;
+    item["partName"] = partName;
+    item["partNo"] = partNo;
+    item["department"] = department;
+    item["category"] = department;
+    item["vendor"] = vendor.isEmpty() ? existing.value("vendor") : QVariant(vendor);
+    item["unitPrice"] = unitPrice;
+    if (existing.isEmpty()) {
+        item["requiredQty"] = 0;
+        item["stockQty"] = 0;
+        item["itemType"] = "Tangible";
+        item["hsnCode"] = QString();
+        item["sacCode"] = QString();
+        item["unit"] = QString();
+        return m_items->add(item);
+    }
+
+    item["originalPartNo"] = matchedPartNo;
+    return m_items->update(item);
 }
 
 int ExcelHandler::getNextSerialNumber() const

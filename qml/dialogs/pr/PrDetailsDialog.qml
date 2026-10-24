@@ -20,9 +20,17 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Close
     width: Math.min(App.windowWidth - 120, 720)
+    height: Math.max(1, Math.min(implicitHeight, App.windowHeight - 32))
 
-    ColumnLayout {
-        anchors.fill: parent; spacing: 8
+    ScrollView {
+        id: prDetailsScroll
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        ColumnLayout {
+            width: prDetailsScroll.availableWidth
+            spacing: 8 * App.dialogScale
 
         GridLayout {
             Layout.fillWidth: true
@@ -68,23 +76,25 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(220, 8 + lineItems.length * 26)
+            Layout.preferredHeight: Math.min(220, 8 + lineItems.length * 26 * App.dialogScale)
             border.color: Theme.border; radius: 4
 
             ListView {
                 id: prDetailItemsView
                 anchors.fill: parent; anchors.margins: 4; clip: true
                 model: lineItems
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 delegate: RowLayout {
                     width: prDetailItemsView.width - 8
-                    height: 26
-                    spacing: 10
+                    height: 26 * App.dialogScale
+                    spacing: 10 * App.dialogScale
                     Label { text: (index + 1) + ". " + modelData.itemName; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                     Label { text: modelData.vendor; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 150; elide: Text.ElideRight }
                     Label { text: modelData.qty + " " + modelData.unit; font.pixelSize: 11; font.bold: true; Layout.preferredWidth: 90; horizontalAlignment: Text.AlignRight }
                     Label { text: Format.rupees(modelData.qty * modelData.estimatedPrice); font.pixelSize: 11; color: Theme.warning; Layout.preferredWidth: 140; horizontalAlignment: Text.AlignRight }
                 }
             }
+        }
         }
     }
 }

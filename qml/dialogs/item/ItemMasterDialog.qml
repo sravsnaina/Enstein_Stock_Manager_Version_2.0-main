@@ -30,11 +30,18 @@ Dialog {
     // Takes most of the window instead of a fixed 750x650, so the item list
     // below shows many more rows at once and the wider entry form fits its
     // fields three pairs to a row.
-    width: Math.min(root.width - 80, 1240)
-    height: Math.min(root.height - 80, 860)
+    width: Math.max(1, Math.min(App.windowWidth - 32, 1240))
+    height: Math.max(1, Math.min(App.windowHeight - 32, 860))
 
-    ColumnLayout{
-        anchors.fill: parent; spacing: 10
+    ScrollView {
+        id: itemMasterScroll
+        anchors.fill: parent
+        contentWidth: availableWidth
+        clip: true
+
+        ColumnLayout {
+            width: itemMasterScroll.availableWidth
+            spacing: 10
 
         Label { text: "Item Master"; font.bold: true; font.pixelSize: 16; color: Theme.textPrimary}
 
@@ -173,13 +180,15 @@ Dialog {
 
         Rectangle {
             Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.preferredHeight: Math.max(150, Math.min(App.windowHeight * 0.32, 280))
             border.color: Theme.border; radius: 5
 
             ListView {
                 id: itemMasterListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                 model: ListModel { id: itemMasterListModel }
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 delegate: Rectangle {
-                    width: itemMasterListView.width - 10; height: 70; color: "#fff"; border.color: Theme.borderSubtle; radius: 4
+                    width: itemMasterListView.width - 10; height: 70 * App.dialogScale; color: "#fff"; border.color: Theme.borderSubtle; radius: 4
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 8
                         Item {
@@ -244,6 +253,7 @@ Dialog {
         }
 
         Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: close() }
+        }
     }
 
     onOpened: {

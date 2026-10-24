@@ -26,13 +26,13 @@ Dialog {
     // the window: the fields scroll inside rather than pushing the OK
     // and Cancel buttons off the bottom edge.
     width: Math.min(App.windowWidth - 120, 1100)
-    height: Math.min(App.windowHeight - 120, 540)
+    height: Math.max(1, Math.min(App.windowHeight - 32, 540))
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
         Label { text: "Edit Vendor Details"; font.bold: true; font.pixelSize: 14 }
-        Rectangle { Layout.fillWidth: true; height: 1; color: "#ccc" }
+        Rectangle { Layout.fillWidth: true; height: 1 * App.dialogScale; color: "#ccc" }
 
         ScrollView {
             id: editVendorScroll
@@ -67,7 +67,7 @@ Dialog {
                     ColumnLayout {
                         id: editAddressSection; anchors.fill: parent; anchors.margins: 8; spacing: 6
                         Label { text: "REGISTERED ADDRESS"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary }
-                        TextArea { id: editVendorAddressField; Layout.fillWidth: true; Layout.preferredHeight: 72; placeholderText: "Building, street, locality, city, state and PIN code"; wrapMode: TextEdit.Wrap; selectByMouse: true }
+                        TextArea { id: editVendorAddressField; Layout.fillWidth: true; Layout.preferredHeight: 72 * App.dialogScale; placeholderText: "Building, street, locality, city, state and PIN code"; wrapMode: TextEdit.Wrap; selectByMouse: true }
                     }
                 }
 

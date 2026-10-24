@@ -8,9 +8,13 @@ import Enstein
 ApplicationWindow {
     id: root
     visible: true
-    width: 1600
-    height: 900
-    font.pixelSize: Theme.fontSizeBody
+    width: Math.min(1600, Screen.width * 0.95)
+    height: Math.min(900, Screen.height * 0.9)
+    minimumWidth: 480
+    minimumHeight: 360
+    font.pixelSize: Theme.fontSizeBody * App.dialogScale
+    // Keep layouts comfortable on tablets and small laptop windows.
+    readonly property bool compactLayout: width < 900
     // A quiet neutral canvas separates operational panels from the window and
     // gives every screen the same professional visual baseline.
     background: Rectangle { color: Theme.workspace }
@@ -85,12 +89,16 @@ ApplicationWindow {
     onSelectedDepartmentChanged: refreshStockOverview()
 
     function columnWidth(colIndex) {
-        var available = Math.max(800, tableHeader.width - 40)
+        var available = Math.max(root.compactLayout ? root.width - 40 : 800,
+                                 tableHeader.width - 40)
         var baseTotal = 0
         for (var i = 0; i < tableBaseWidths.length; i++) baseTotal += tableBaseWidths[i]
         var scale = available / baseTotal
         var width = Math.round(tableBaseWidths[colIndex] * scale)
-        return Math.max(tableMinWidths[colIndex], width)
+        var minimum = root.compactLayout
+                ? Math.round(tableMinWidths[colIndex] * 0.6)
+                : tableMinWidths[colIndex]
+        return Math.max(minimum, width)
     }
 
     title: {
@@ -182,7 +190,7 @@ ApplicationWindow {
             rows = Backend.model.rowCount()
             root.tableRefreshToken++
             refreshPOList()
-            refreshMovements()
+            movementsDialog.refresh()
             statusTimer.restart()
         }
 
@@ -190,7 +198,7 @@ ApplicationWindow {
             statusLabel.text = "Issued: " + partName + " x" + qty + " (" + issueNo + ")"
             rows = Backend.model.rowCount()
             root.tableRefreshToken++
-            refreshMovements()
+            movementsDialog.refresh()
             refreshIssuePartDropdown()
             statusTimer.restart()
         }
@@ -286,6 +294,7 @@ ApplicationWindow {
         standardButtons: Dialog.Ok | Dialog.Cancel
         modal: true
         anchors.centerIn: parent
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
         ColumnLayout {
             spacing: 10
@@ -328,10 +337,19 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 450
+        width: Math.min(450, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
-        ColumnLayout {
-            spacing: 10; width: parent.width
+        ScrollView {
+            id: addItemScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: addItemScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             Label { text: "Add New Stock Item"; font.bold: true; font.pixelSize: 14 }
             Rectangle { Layout.fillWidth: true; height: 1; color: "#ccc" }
@@ -357,6 +375,7 @@ ApplicationWindow {
             }
 
             Label { text: "If part exists, stock will be added to current quantity"; font.pixelSize: 10; color: Theme.textSecondary; wrapMode: Text.WordWrap }
+        }
         }
 
         onAccepted: {
@@ -431,7 +450,7 @@ ApplicationWindow {
 
     function openPoPdfPreview(poNo) {
         poPreviewPoNo = poNo
-        poPreviewCommentsField.text = ""
+        poPdfPreviewDialog.commentsText = ""
         refreshPoPdfPreview()
         if (poPreviewPages.length > 0)
             poPdfPreviewDialog.open()
@@ -439,7 +458,7 @@ ApplicationWindow {
 
     function refreshPoPdfPreview() {
         var result = Backend.generatePOPreview(poPreviewPoNo,
-                                                    poPreviewCommentsField.text)
+                                                    poPdfPreviewDialog.commentsText)
         if (!result || !result.pages || result.pages.length === 0) {
             poPreviewPages = []
             poPreviewPdfPath = ""
@@ -453,7 +472,7 @@ ApplicationWindow {
 
     function sendPoPdf() {
         var saved = Backend.savePOPdf(poPreviewPoNo, "",
-                                           poPreviewCommentsField.text)
+                                           poPdfPreviewDialog.commentsText)
         if (saved === "") return
         poLastSavedPdf = saved
         statusLabel.text = "Purchase order saved to " + saved
@@ -743,11 +762,19 @@ ApplicationWindow {
         title: "Purchase Order Management"
         modal: true
         anchors.centerIn: parent
-        width: parent ? Math.min(1140, parent.width - 60) : 1140
-        height: parent ? Math.min(840, parent.height - 60) : 840
+        width: Math.max(1, Math.min(1140, root.width - 32))
+        height: Math.max(1, Math.min(840, root.height - 32))
 
-        ColumnLayout {
-            anchors.fill: parent; spacing: 12
+        ScrollView {
+            id: poDialogScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: poDialogScroll.availableWidth
+                spacing: 12 * App.dialogScale
 
             RowLayout {
                 Layout.fillWidth: true
@@ -772,11 +799,12 @@ ApplicationWindow {
                     id: poEntryGrid
                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
                     anchors.margins: 14
-                    columns: 4; rowSpacing: 12; columnSpacing: 16
+                    columns: root.width < 900 ? 2 : 4
+                    rowSpacing: 8; columnSpacing: root.width < 900 ? 8 : 16
 
                     Label {
                         text: "ORDER LINE DETAILS"
-                        Layout.columnSpan: 4; Layout.fillWidth: true
+                        Layout.columnSpan: poEntryGrid.columns; Layout.fillWidth: true
                         font.bold: true; font.pixelSize: 11; color: Theme.textSecondary
                     }
 
@@ -805,7 +833,7 @@ ApplicationWindow {
                         ComboBox {
                             id: poPartNameField
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 180
+                            Layout.minimumWidth: root.width < 900 ? 100 : 180
                             editable: true
                             model: []
                             onCurrentTextChanged: applyPoPartDetails(currentText)
@@ -839,7 +867,7 @@ ApplicationWindow {
                         ComboBox {
                             id: poVendorField
                             Layout.fillWidth: true
-                            Layout.minimumWidth: 180
+                            Layout.minimumWidth: root.width < 900 ? 100 : 180
                             editable: true
                             model: Backend.getVendorNames()
                         }
@@ -888,7 +916,7 @@ ApplicationWindow {
                             id: poUnitPriceField
                             Layout.fillWidth: true
                             // Wide enough to show a crore-scale rate in full.
-                            Layout.minimumWidth: 170
+                            Layout.minimumWidth: root.width < 900 ? 110 : 170
                             placeholderText: "0.00"
                             text: "0.00"
                             horizontalAlignment: TextInput.AlignRight
@@ -928,8 +956,9 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: poCartModel.count === 0
-                                        ? 64
-                                        : Math.min(196, 48 + poCartModel.count * 40)
+                                        ? 56 * App.dialogScale
+                                        : Math.min((root.width < 900 ? 112 : 196) * App.dialogScale,
+                                                   (48 + poCartModel.count * 40) * App.dialogScale)
                 border.color: Theme.info; radius: 5; color: "#fbfdff"
 
                 ColumnLayout {
@@ -943,10 +972,10 @@ ApplicationWindow {
                         spacing: 10
                         visible: poCartModel.count > 0
                         Label { text: "Item"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.fillWidth: true }
-                        Label { text: "Vendor"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 190 }
+                        Label { text: "Vendor"; visible: root.width >= 900; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 150 }
                         Label { text: "Qty"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight }
-                        Label { text: "Rate"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 170; horizontalAlignment: Text.AlignRight }
-                        Label { text: "Amount"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 180; horizontalAlignment: Text.AlignRight }
+                        Label { text: "Rate"; visible: root.width >= 900; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 130; horizontalAlignment: Text.AlignRight }
+                        Label { text: "Amount"; font.bold: true; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: root.width < 900 ? 130 : 160; horizontalAlignment: Text.AlignRight }
                         Item { Layout.preferredWidth: 30 }
                     }
 
@@ -956,7 +985,7 @@ ApplicationWindow {
                         clip: true; spacing: 6
                         model: poCartModel
                         delegate: Rectangle {
-                            width: poCartView.width; height: 34
+                            width: poCartView.width; height: 34 * App.dialogScale
                             color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                             RowLayout {
                                 anchors.fill: parent
@@ -972,7 +1001,8 @@ ApplicationWindow {
                                 Label {
                                     text: model.vendor
                                     font.pixelSize: 11; color: Theme.textSecondary
-                                    Layout.preferredWidth: 190; elide: Text.ElideRight
+                                    visible: root.width >= 900
+                                    Layout.preferredWidth: 150; elide: Text.ElideRight
                                 }
                                 Label {
                                     text: model.qty
@@ -982,15 +1012,16 @@ ApplicationWindow {
                                 Label {
                                     text: Format.rupees(model.unitPrice)
                                     font.pixelSize: 11; color: Theme.textPrimary
-                                    Layout.preferredWidth: 170; horizontalAlignment: Text.AlignRight
+                                    visible: root.width >= 900
+                                    Layout.preferredWidth: 130; horizontalAlignment: Text.AlignRight
                                 }
                                 Label {
                                     text: Format.rupees(model.lineTotal)
                                     font.pixelSize: 12; font.bold: true; color: Theme.success
-                                    Layout.preferredWidth: 180; horizontalAlignment: Text.AlignRight
+                                    Layout.preferredWidth: root.width < 900 ? 130 : 160; horizontalAlignment: Text.AlignRight
                                 }
                                 Button {
-                                    Layout.preferredWidth: 30; Layout.preferredHeight: 24
+                                    Layout.preferredWidth: 30 * App.dialogScale; Layout.preferredHeight: 24 * App.dialogScale
                                     ToolTip.visible: hovered
                                     ToolTip.text: "Remove this item"
                                     onClicked: { poCartModel.remove(index); recalcPoCartTotal() }
@@ -1009,13 +1040,15 @@ ApplicationWindow {
             }
 
             // The period the goods are needed in, plus who prepared the order
-            RowLayout {
-                Layout.fillWidth: true; spacing: 10
+            GridLayout {
+                Layout.fillWidth: true
+                columns: root.width < 1000 ? 6 : 11
+                rowSpacing: 6; columnSpacing: 8
 
                 Label { text: "Needed from:"; font.bold: true }
                 TextField {
                     id: poExpectedField
-                    Layout.preferredWidth: 120
+                    Layout.preferredWidth: root.width < 900 ? 92 : 120
                     placeholderText: "YYYY-MM-DD"
                     readOnly: true
                     selectByMouse: true
@@ -1031,7 +1064,7 @@ ApplicationWindow {
                 Label { text: "to:"; font.bold: true }
                 TextField {
                     id: poExpectedEndField
-                    Layout.preferredWidth: 120
+                Layout.preferredWidth: root.width < 900 ? 92 : 120
                     placeholderText: "YYYY-MM-DD"
                     readOnly: true
                     selectByMouse: true
@@ -1072,7 +1105,7 @@ ApplicationWindow {
                 Label { text: "Prepared By*:" }
                 TextField {
                     id: poPreparedByField
-                    Layout.preferredWidth: 180
+                    Layout.preferredWidth: root.width < 900 ? 120 : 180
                     placeholderText: "Enter preparer name"
                     text: Backend.currentUser
                     selectByMouse: true
@@ -1089,7 +1122,7 @@ ApplicationWindow {
                 // at crore values instead of squeezing the fields beside it.
                 Rectangle {
                     Layout.preferredWidth: 260
-                    Layout.preferredHeight: 38
+                    Layout.preferredHeight: 38 * App.dialogScale
                     Layout.leftMargin: 6
                     color: "#eafaf1"; border.color: Theme.success; radius: 4
                     RowLayout {
@@ -1151,13 +1184,15 @@ ApplicationWindow {
             }
 
             // Status filter + free-text search across the PO list
-            RowLayout {
-                Layout.fillWidth: true; Layout.topMargin: 4; spacing: 10
+            GridLayout {
+                Layout.fillWidth: true; Layout.topMargin: 4
+                columns: root.width < 900 ? 2 : 7
+                rowSpacing: 6; columnSpacing: 8
 
                 Label { text: "Filter:"; font.bold: true }
                 ComboBox {
                     id: poFilterCombo
-                    Layout.preferredWidth: 170
+                    Layout.preferredWidth: root.width < 900 ? 120 : 170
                     model: ["All", "Draft", "Sent", "Partially Received", "Received", "Closed"]
                     onCurrentTextChanged: refreshPOList()
                 }
@@ -1166,7 +1201,7 @@ ApplicationWindow {
                 TextField {
                     id: poSearchField
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 240
+                    Layout.minimumWidth: root.width < 900 ? 80 : 240
                     placeholderText: "PO number, vendor, part name, or date (e.g. 2026-08)"
                     selectByMouse: true
                     onTextChanged: applyPoSearch()
@@ -1198,13 +1233,16 @@ ApplicationWindow {
             // PO List
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.preferredHeight: Math.max(180, Math.min(root.height * 0.4, 360))
+                Layout.minimumHeight: 120 * App.dialogScale
                 border.color: Theme.border; radius: 5
 
                 ListView {
                     id: poListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: ListModel { id: poListModel }
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                     delegate: Rectangle {
-                        width: poListView.width - 10; height: 78
+                        width: poListView.width - 10; height: 78 * App.dialogScale
                         color: {
                             if (model.status === "Received") return Theme.successWash
                             if (model.status === "Draft") return Theme.warningWash
@@ -1216,7 +1254,9 @@ ApplicationWindow {
                             anchors.fill: parent; anchors.margins: 10
                             spacing: 12
                             ColumnLayout {
-                                Layout.fillWidth: true; Layout.minimumWidth: 180; spacing: 3
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: root.width < 900 ? 80 : 180
+                                spacing: 3
                                 RowLayout {
                                     spacing: 8
                                     Label { text: model.poNo; font.bold: true; font.pixelSize: 13; color: Theme.textPrimary }
@@ -1233,7 +1273,8 @@ ApplicationWindow {
                                     }
                                 }
                                 Label {
-                                    text: model.partName + "  |  Qty: " + model.qty + "  |  Vendor: " + model.vendor
+                                    text: model.partName + "  |  Qty: " + model.qty + "  |  Vendor: " + model.vendor +
+                                          (root.width < 640 ? "  |  " + Format.rupees(model.totalAmount) : "")
                                     font.pixelSize: 11; color: Theme.textSecondary
                                     Layout.fillWidth: true; elide: Text.ElideRight
                                 }
@@ -1251,9 +1292,10 @@ ApplicationWindow {
                             // Amounts get a dedicated right-aligned column so a
                             // crore-scale total is never elided by the details.
                             ColumnLayout {
-                                Layout.preferredWidth: 200
+                                Layout.preferredWidth: root.width < 900 ? 140 : 200
                                 Layout.alignment: Qt.AlignVCenter
                                 spacing: 2
+                                visible: root.width >= 640
                                 Label {
                                     text: Format.rupees(model.totalAmount)
                                     font.bold: true; font.pixelSize: 14; color: Theme.success
@@ -1297,7 +1339,7 @@ ApplicationWindow {
                                     selectedPOItems = Backend.getPOItems(model.poNo)
                                     poDetailsDialog.open()
                                 }
-                                contentItem: Text { text: "View"; color: Theme.textPrimary; font.pixelSize: 11 }
+                                contentItem: Text { text: root.width < 900 ? "V" : "View"; color: Theme.textPrimary; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
                             Button {
                                 text: "Edit"
@@ -1316,7 +1358,7 @@ ApplicationWindow {
                                     editPoPreparedByField.text = model.preparedBy || Backend.currentUser
                                     poEditDialog.open()
                                 }
-                                contentItem: Text { text: "Edit"; color: "#8e44ad"; font.pixelSize: 11 }
+                                contentItem: Text { text: root.width < 900 ? "E" : "Edit"; color: "#8e44ad"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
                             Button {
                                 text: "Send"
@@ -1325,7 +1367,7 @@ ApplicationWindow {
                                     pendingPOForApproval = model.poNo
                                     approvalDialog.showForApproval(model.poNo)
                                 }
-                                contentItem: Text { text: "Send"; color: Theme.info; font.pixelSize: 11 }
+                                contentItem: Text { text: root.width < 900 ? "S" : "Send"; color: Theme.info; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
                             Button {
                                 text: "Receive"
@@ -1337,13 +1379,13 @@ ApplicationWindow {
                                     grnReceivedByField.text = Backend.currentUser
                                     grnDialog.open()
                                 }
-                                contentItem: Text { text: "Receive"; color: Theme.success; font.pixelSize: 11 }
+                                contentItem: Text { text: root.width < 900 ? "R" : "Receive"; color: Theme.success; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
                             Button {
                                 text: "Close"
                                 visible: model.status === "Received"
                                 onClicked: { Backend.updatePOStatus(model.poNo, "Closed"); refreshPOList() }
-                                contentItem: Text { text: "Close"; color: Theme.textMuted; font.pixelSize: 11 }
+                                contentItem: Text { text: root.width < 900 ? "X" : "Close"; color: Theme.textMuted; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
                         }
                     }
@@ -1362,6 +1404,7 @@ ApplicationWindow {
             }
 
             Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: poDialog.close() }
+            }
         }
 
         onOpened: {
@@ -1388,11 +1431,19 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-        width: 560
+        width: Math.min(560, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
-        ColumnLayout {
-            spacing: 10
-            width: parent.width
+        ScrollView {
+            id: poEditScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: poEditScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             Label { text: "PO: " + editingPONumber; font.bold: true; color: Theme.textPrimary }
 
@@ -1478,6 +1529,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignRight
             }
+            }
         }
 
         onAccepted: {
@@ -1535,8 +1587,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
-        width: 640
-        height: 520
+        width: Math.min(640, root.width - 32)
+        height: Math.max(1, Math.min(520, root.height - 32))
 
         ColumnLayout {
             anchors.fill: parent
@@ -1579,7 +1631,7 @@ ApplicationWindow {
                     model: poPartPickerModel
                     ScrollBar.vertical: ScrollBar {}
                     delegate: Rectangle {
-                        width: poPartPickerView.width - 10; height: 58
+                        width: poPartPickerView.width - 10; height: 58 * App.dialogScale
                         color: partPickerMouse.containsMouse ? "#eaf4fd" : "#fff"
                         border.color: Theme.borderSubtle; radius: 4
 
@@ -1618,8 +1670,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
-        width: 640
-        height: 520
+        width: Math.min(640, root.width - 32)
+        height: Math.max(1, Math.min(520, root.height - 32))
 
         ColumnLayout {
             anchors.fill: parent
@@ -1660,7 +1712,7 @@ ApplicationWindow {
                     model: poVendorPickerModel
                     ScrollBar.vertical: ScrollBar {}
                     delegate: Rectangle {
-                        width: poVendorPickerView.width - 10; height: 58
+                        width: poVendorPickerView.width - 10; height: 58 * App.dialogScale
                         color: vendorPickerMouse.containsMouse ? "#eaf4fd" : "#fff"
                         border.color: Theme.borderSubtle; radius: 4
 
@@ -1944,11 +1996,19 @@ ApplicationWindow {
         title: "Purchase Requests"
         modal: true
         anchors.centerIn: parent
-        width: parent ? Math.min(1180, parent.width - 60) : 1180
-        height: parent ? Math.min(880, parent.height - 40) : 880
+        width: Math.max(1, Math.min(1180, root.width - 32))
+        height: Math.max(1, Math.min(880, root.height - 32))
 
-        ColumnLayout {
-            anchors.fill: parent; spacing: 10
+        ScrollView {
+            id: prDialogScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: prDialogScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             RowLayout {
                 Layout.fillWidth: true
@@ -2068,7 +2128,7 @@ ApplicationWindow {
                         id: prRemarksField
                         Layout.columnSpan: 3
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 56
+                        Layout.preferredHeight: 56 * App.dialogScale
                         placeholderText: "What it is for - the reviewer reads this before approving"
                         wrapMode: TextEdit.Wrap
                         selectByMouse: true
@@ -2196,8 +2256,8 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: prCartModel.count === 0
-                                        ? 58
-                                        : Math.min(170, 44 + prCartModel.count * 38)
+                                        ? 58 * App.dialogScale
+                                        : Math.min(170, 44 + prCartModel.count * 38) * App.dialogScale
                 border.color: Theme.warning; radius: 5; color: "#ffffff"
 
                 ColumnLayout {
@@ -2222,7 +2282,7 @@ ApplicationWindow {
                         clip: true; spacing: 5
                         model: prCartModel
                         delegate: Rectangle {
-                            width: prCartView.width; height: 32
+                            width: prCartView.width; height: 32 * App.dialogScale
                             color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                             RowLayout {
                                 anchors.fill: parent
@@ -2248,7 +2308,7 @@ ApplicationWindow {
                                     Layout.preferredWidth: 160; horizontalAlignment: Text.AlignRight
                                 }
                                 Button {
-                                    Layout.preferredWidth: 30; Layout.preferredHeight: 24
+                                    Layout.preferredWidth: 30 * App.dialogScale; Layout.preferredHeight: 24 * App.dialogScale
                                     ToolTip.visible: hovered
                                     ToolTip.text: "Remove this line"
                                     onClicked: prCartModel.remove(index)
@@ -2272,7 +2332,7 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.preferredWidth: 280
-                    Layout.preferredHeight: 38
+                    Layout.preferredHeight: 38 * App.dialogScale
                     color: "#fdf0e2"; border.color: Theme.warning; radius: 4
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
@@ -2346,14 +2406,16 @@ ApplicationWindow {
             // ---- The queue ----
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.minimumHeight: 90
+                Layout.preferredHeight: Math.max(160, Math.min(root.height * 0.35, 320))
+                Layout.minimumHeight: 90 * App.dialogScale
                 border.color: Theme.border; radius: 5
 
                 ListView {
                     id: prListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: prListModel
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                     delegate: Rectangle {
-                        width: prListView.width - 10; height: 74
+                        width: prListView.width - 10; height: 74 * App.dialogScale
                         color: {
                             if (model.status === "Approved") return "#eaf6ff"
                             if (model.status === "Ordered") return Theme.successWash
@@ -2481,6 +2543,7 @@ ApplicationWindow {
             }
 
             Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: prDialog.close() }
+            }
         }
 
         onOpened: {
@@ -2500,10 +2563,12 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
-        width: 480
+        width: Math.min(480, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
         ColumnLayout {
-            anchors.fill: parent; spacing: 10
+            anchors.fill: parent
+            spacing: 10 * App.dialogScale
             Label {
                 text: prReviewAction === "Approved"
                       ? "Approving lets supply chain raise a purchase order for this request."
@@ -2539,7 +2604,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        width: 460
+        width: Math.min(460, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
         Label {
             width: parent.width
@@ -2607,8 +2673,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
-        width: Math.min(root.width - 120, 720)
-        height: Math.min(root.height - 140, 520)
+        width: Math.max(1, Math.min(root.width - 32, 720))
+        height: Math.max(1, Math.min(root.height - 32, 520))
 
         ColumnLayout {
             anchors.fill: parent; spacing: 8
@@ -2630,7 +2696,7 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: prPartPickerModel
                     delegate: Rectangle {
-                        width: prPartPickerView.width - 10; height: 46
+                        width: prPartPickerView.width - 10; height: 46 * App.dialogScale
                         color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                         MouseArea {
                             anchors.fill: parent
@@ -2677,10 +2743,12 @@ ApplicationWindow {
     // The grid itself is read-only, so a correction goes through here: one
     // deliberate action, login-gated, with every column of the row in view.
     property int editingStockRow: -1
+    property string editingStockOriginalPartNo: ""
 
     function openStockRowEditor(row) {
         if (row <= 0 || !loginDialog.isAuthenticated) return
         editingStockRow = row
+        editingStockOriginalPartNo = (Backend.model.getData(row, 1) || "").toString()
         stockEditPartName.text = (Backend.model.getData(row, 0) || "").toString()
         stockEditPartNo.text = (Backend.model.getData(row, 1) || "").toString()
         stockEditStock.text = (Backend.model.getData(row, 2) || "").toString()
@@ -2699,7 +2767,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Save | Dialog.Cancel
-        width: 620
+        width: Math.min(620, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
         onAccepted: {
             if (editingStockRow <= 0) return
@@ -2713,6 +2782,11 @@ ApplicationWindow {
             m.setDataAt(editingStockRow, 6, stockEditVendor.text)
             m.setDataAt(editingStockRow, 7, stockEditDate.text)
             m.setDataAt(editingStockRow, 8, stockEditUnitPrice.text)
+            if (!Backend.syncStockRowToItemMaster(editingStockRow, editingStockOriginalPartNo)) {
+                statusLabel.text = "Stock row updated, but Item Master could not be updated"
+                statusTimer.restart()
+                return
+            }
             // An edit can move a part between departments or change a
             // quantity, so re-roll the totals.
             root.tableRefreshToken++
@@ -3084,11 +3158,19 @@ ApplicationWindow {
         title: "Delivery Challan"
         modal: true
         anchors.centerIn: parent
-        width: parent ? Math.min(1180, parent.width - 60) : 1180
-        height: parent ? Math.min(880, parent.height - 40) : 880
+        width: Math.max(1, Math.min(1180, root.width - 32))
+        height: Math.max(1, Math.min(880, root.height - 32))
 
-        ColumnLayout {
-            anchors.fill: parent; spacing: 10
+        ScrollView {
+            id: dcDialogScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: dcDialogScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             RowLayout {
                 Layout.fillWidth: true
@@ -3204,7 +3286,7 @@ ApplicationWindow {
                     TextArea {
                         id: dcPartyAddressField
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 52
+                        Layout.preferredHeight: 52 * App.dialogScale
                         placeholderText: "Street, city - PIN (one line per printed line)"
                         wrapMode: TextArea.Wrap
                         selectByMouse: true
@@ -3255,7 +3337,7 @@ ApplicationWindow {
                     TextArea {
                         id: dcShipAddressField; visible: dcSeparateShipping.checked
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 52
+                        Layout.preferredHeight: 52 * App.dialogScale
                         placeholderText: "Where the goods are actually going"
                         wrapMode: TextArea.Wrap
                         selectByMouse: true
@@ -3370,8 +3452,8 @@ ApplicationWindow {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: dcCartModel.count === 0
-                                        ? 58
-                                        : Math.min(180, 44 + dcCartModel.count * 38)
+                                        ? 58 * App.dialogScale
+                                        : Math.min(180, 44 + dcCartModel.count * 38) * App.dialogScale
                 border.color: "#1b9dd9"; radius: 5; color: "#ffffff"
 
                 ColumnLayout {
@@ -3396,7 +3478,7 @@ ApplicationWindow {
                         clip: true; spacing: 5
                         model: dcCartModel
                         delegate: Rectangle {
-                            width: dcCartView.width; height: 32
+                            width: dcCartView.width; height: 32 * App.dialogScale
                             color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                             RowLayout {
                                 anchors.fill: parent
@@ -3414,7 +3496,7 @@ ApplicationWindow {
                                 Label { text: Format.qty(model.qty); font.pixelSize: 12; font.bold: true; color: "#1b9dd9"; Layout.preferredWidth: 80; horizontalAlignment: Text.AlignRight }
                                 Label { text: model.unit; font.pixelSize: 11; color: Theme.textPrimary; Layout.preferredWidth: 90; elide: Text.ElideRight }
                                 Button {
-                                    Layout.preferredWidth: 30; Layout.preferredHeight: 24
+                                    Layout.preferredWidth: 30 * App.dialogScale; Layout.preferredHeight: 24 * App.dialogScale
                                     ToolTip.visible: hovered
                                     ToolTip.text: "Remove this line"
                                     onClicked: dcCartModel.remove(index)
@@ -3440,7 +3522,7 @@ ApplicationWindow {
                 TextArea {
                     id: dcTermsField
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 58
+                    Layout.preferredHeight: 58 * App.dialogScale
                     placeholderText: "Printed at the foot of the challan"
                     wrapMode: TextArea.Wrap
                     selectByMouse: true
@@ -3524,14 +3606,16 @@ ApplicationWindow {
             // ---- The challans already raised ----
             Rectangle {
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.minimumHeight: 90
+                Layout.preferredHeight: Math.max(160, Math.min(root.height * 0.35, 320))
+                Layout.minimumHeight: 90 * App.dialogScale
                 border.color: Theme.border; radius: 5
 
                 ListView {
                     id: dcListView; anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: dcListModel
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                     delegate: Rectangle {
-                        width: dcListView.width - 10; height: 68
+                        width: dcListView.width - 10; height: 68 * App.dialogScale
                         color: {
                             if (model.status === "Delivered") return Theme.successWash
                             if (model.status === "Cancelled") return "#f4f4f4"
@@ -3629,6 +3713,7 @@ ApplicationWindow {
             }
 
             Button { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: dcDialog.close() }
+            }
         }
 
         onOpened: {
@@ -3648,7 +3733,8 @@ ApplicationWindow {
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
-        width: 460
+        width: Math.min(460, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
         Label {
             width: parent.width
@@ -3715,7 +3801,7 @@ ApplicationWindow {
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
         width: Math.min(root.width - 120, 720)
-        height: Math.min(root.height - 140, 520)
+        height: Math.max(1, Math.min(root.height - 32, 520))
 
         ColumnLayout {
             anchors.fill: parent; spacing: 8
@@ -3737,7 +3823,7 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: dcPartPickerModel
                     delegate: Rectangle {
-                        width: dcPartPickerView.width - 10; height: 46
+                        width: dcPartPickerView.width - 10; height: 46 * App.dialogScale
                         color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                         MouseArea {
                             anchors.fill: parent
@@ -3778,7 +3864,7 @@ ApplicationWindow {
         anchors.centerIn: parent
         standardButtons: Dialog.Cancel
         width: Math.min(root.width - 120, 720)
-        height: Math.min(root.height - 140, 520)
+        height: Math.max(1, Math.min(root.height - 32, 520))
 
         ColumnLayout {
             anchors.fill: parent; spacing: 8
@@ -3800,7 +3886,7 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.margins: 5; clip: true; spacing: 4
                     model: dcPartyPickerModel
                     delegate: Rectangle {
-                        width: dcPartyPickerView.width - 10; height: 58
+                        width: dcPartyPickerView.width - 10; height: 58 * App.dialogScale
                         color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                         MouseArea {
                             anchors.fill: parent
@@ -3852,9 +3938,18 @@ ApplicationWindow {
         anchors.centerIn: parent
         standardButtons: Dialog.Close
         width: Math.min(root.width - 120, 720)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
-        ColumnLayout {
-            anchors.fill: parent; spacing: 8
+        ScrollView {
+            id: dcDetailsScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: dcDetailsScroll.availableWidth
+                spacing: 8 * App.dialogScale
 
             GridLayout {
                 Layout.fillWidth: true
@@ -3903,16 +3998,17 @@ ApplicationWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(220, 8 + selectedDCItems.length * 26)
+                Layout.preferredHeight: Math.min(220, 8 + selectedDCItems.length * 26) * App.dialogScale
                 border.color: Theme.border; radius: 4
 
                 ListView {
                     id: dcDetailItemsView
                     anchors.fill: parent; anchors.margins: 4; clip: true
                     model: selectedDCItems
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                     delegate: RowLayout {
                         width: dcDetailItemsView.width - 8
-                        height: 26
+                        height: 26 * App.dialogScale
                         spacing: 10
                         Label { text: (index + 1) + ". " + modelData.itemName; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                         Label { text: modelData.hsnCode; font.pixelSize: 11; color: Theme.textSecondary; Layout.preferredWidth: 120 }
@@ -3928,6 +4024,7 @@ ApplicationWindow {
                     dcDetailsDialog.close()
                     openDcPdfPreview(selectedDCDetails.dcNo)
                 }
+            }
             }
         }
     }
@@ -3993,10 +4090,19 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 470
+        width: Math.min(470, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
-        ColumnLayout {
-            spacing: 10; width: parent.width
+        ScrollView {
+            id: grnScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: grnScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             Label { text: "Goods Receipt Note"; font.bold: true; font.pixelSize: 14; color: Theme.success }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.success }
@@ -4039,6 +4145,7 @@ ApplicationWindow {
 
             Label { text: "Remarks:" }
             TextField { id: grnRemarksField; Layout.fillWidth: true; placeholderText: "Any remarks..." }
+            }
         }
 
         onAccepted: {
@@ -4050,7 +4157,7 @@ ApplicationWindow {
                 grnRemarksField.text, grnReceivedByField.text)
             if (grnNo !== "") {
                 refreshPOList()
-                refreshMovements()
+                movementsDialog.refresh()
                 rows = Backend.model.rowCount()
             }
         }
@@ -4086,10 +4193,19 @@ ApplicationWindow {
         modal: true
         standardButtons: Dialog.Ok | Dialog.Cancel
         anchors.centerIn: parent
-        width: 470
+        width: Math.min(470, root.width - 32)
+        height: Math.max(1, Math.min(implicitHeight, root.height - 32))
 
-        ColumnLayout {
-            spacing: 10; width: parent.width
+        ScrollView {
+            id: issueScroll
+            anchors.fill: parent
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                width: issueScroll.availableWidth
+                spacing: 10 * App.dialogScale
 
             Label { text: "Material Issue Note"; font.bold: true; font.pixelSize: 14; color: Theme.warning }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.warning }
@@ -4104,14 +4220,14 @@ ApplicationWindow {
             }
 
             Rectangle {
-                Layout.fillWidth: true; height: 100
+                Layout.fillWidth: true; height: 100 * App.dialogScale
                 border.color: Theme.border; radius: 4; color: Theme.surfaceAlt
 
                 ListView {
                     anchors.fill: parent; anchors.margins: 4; clip: true; spacing: 4
                     model: issueSearchModel
                     delegate: Rectangle {
-                        width: parent.width; height: 28
+                        width: parent.width; height: 28 * App.dialogScale
                         color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 6
@@ -4162,7 +4278,7 @@ ApplicationWindow {
 
             // Cart: parts that will be issued together under one issue number
             Rectangle {
-                Layout.fillWidth: true; height: 96
+                Layout.fillWidth: true; height: 96 * App.dialogScale
                 border.color: Theme.warning; radius: 4; color: "#fffaf5"
 
                 ListView {
@@ -4170,7 +4286,7 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.margins: 4; clip: true; spacing: 2
                     model: issueCartModel
                     delegate: Rectangle {
-                        width: issueCartView.width - 8; height: 24
+                        width: issueCartView.width - 8; height: 24 * App.dialogScale
                         color: "#fff"; border.color: Theme.borderSubtle; radius: 3
                         RowLayout {
                             anchors.fill: parent; anchors.margins: 4
@@ -4178,7 +4294,7 @@ ApplicationWindow {
                             Label { text: "Qty: " + model.qty; font.pixelSize: 11; color: Theme.warning }
                             Button {
                                 text: "X"
-                                Layout.preferredWidth: 24; Layout.preferredHeight: 18
+                                Layout.preferredWidth: 24 * App.dialogScale; Layout.preferredHeight: 18 * App.dialogScale
                                 onClicked: issueCartModel.remove(index)
                                 contentItem: Text { text: "X"; color: Theme.danger; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             }
@@ -4203,6 +4319,7 @@ ApplicationWindow {
             Rectangle { Layout.fillWidth: true; height: 1; color: "#ccc" }
 
             Label { text: "Stock will be deducted automatically for every part in the list"; font.pixelSize: 10; color: Theme.warning; wrapMode: Text.WordWrap }
+            }
         }
 
         onAccepted: {
@@ -4229,7 +4346,7 @@ ApplicationWindow {
                 issuePartField.editText = ""
                 issueQtyField.value = 1
                 rows = Backend.model.rowCount()
-                refreshMovements()
+                movementsDialog.refresh()
             }
         }
 
@@ -4245,18 +4362,12 @@ ApplicationWindow {
 
     StockMovementsDialog {
         id: movementsDialog
-        onRefreshRequested: refreshMovements()
+        onRefreshRequested: refresh()
     }
 
     /* ================= REPORTS DIALOG ================= */
 
     ReportsDialog { id: reportsDialog }
-
-    function refreshMovements() {
-        movementsModel.clear()
-        var movements = Backend.getStockMovements(movFilterField.text)
-        for (var i = movements.length - 1; i >= 0; i--) movementsModel.append(movements[i])
-    }
 
     /* ================= LOW STOCK ALERT DIALOG ================= */
 
@@ -4315,8 +4426,8 @@ ApplicationWindow {
         id: cloudSettingsDialog
         title: "Database Connection"
         modal: true
-        width: 560
-        height: parent ? Math.min(780, parent.height - 60) : 780
+        width: Math.min(560, root.width - 32)
+        height: Math.max(1, Math.min(780, root.height - 32))
         anchors.centerIn: parent
 
         onOpened: {
@@ -4339,6 +4450,7 @@ ApplicationWindow {
             anchors.fill: parent
             contentWidth: availableWidth
             clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
         ColumnLayout {
             spacing: 16; width: dbSettingsScroll.availableWidth
@@ -4504,10 +4616,45 @@ ApplicationWindow {
     /* ================= TOOLBAR ================= */
 
     header: ToolBar {
-        background: Rectangle { color: "#34495e" }
+    id: appToolbar
+    implicitHeight: 42
+
+    background: Rectangle {
+        color: "#34495e"
+    }
+
+    Flickable {
+        id: toolbarFlick
+
+        anchors.fill: parent
+        clip: true
+
+        contentWidth: Math.max(
+            width,
+            toolbarItems.implicitWidth
+        )
+        contentHeight: height
+
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.HorizontalFlick
+
+        ScrollBar.horizontal: ScrollBar {
+            policy: toolbarItems.implicitWidth > toolbarFlick.width
+                    ? ScrollBar.AlwaysOn
+                    : ScrollBar.AsNeeded
+        }
 
         RowLayout {
-            anchors.fill: parent; spacing: 3
+            id: toolbarItems
+
+            x: 0
+            y: 0
+            height: toolbarFlick.height
+            width: Math.max(
+                toolbarFlick.width,
+                implicitWidth
+            )
+            spacing: 3
 
             // FILE OPERATIONS
             // ToolButton {
@@ -4715,6 +4862,7 @@ ApplicationWindow {
                 ToolTip.visible: hovered; ToolTip.text: "Database Connection Settings"
                 contentItem: Text { text: parent.text; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11 }
             }
+            }
         }
     }
 
@@ -4789,7 +4937,8 @@ ApplicationWindow {
             color: "#ffffff"; border.color: "#e3e7ea"
 
             RowLayout {
-                anchors.fill: parent; anchors.margins: 14; spacing: 28
+                anchors.fill: parent; anchors.margins: root.compactLayout ? 8 : 14
+                spacing: root.compactLayout ? 8 : 28
 
                 Repeater {
                     model: [
@@ -4807,7 +4956,7 @@ ApplicationWindow {
                         }
                         Label {
                             text: modelData.value
-                            font.pixelSize: 22; font.bold: true
+                            font.pixelSize: root.compactLayout ? 18 : 22; font.bold: true
                             color: "#1f2933"
                         }
                     }
@@ -4836,7 +4985,8 @@ ApplicationWindow {
             color: "#ffffff"; border.color: "#e3e7ea"
 
             RowLayout {
-                anchors.fill: parent; anchors.margins: 14; spacing: 20
+                anchors.fill: parent; anchors.margins: root.compactLayout ? 8 : 14
+                spacing: root.compactLayout ? 8 : 20
 
                 // Department list: the selector, and the exact numbers behind
                 // the ring beside it.
@@ -4879,7 +5029,7 @@ ApplicationWindow {
                                 font.pixelSize: 12; font.bold: true; color: "#1f2933"
                                 Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight
                             }
-                            Item { Layout.preferredWidth: 106 }
+                            Item { Layout.preferredWidth: root.compactLayout ? 0 : 106 }
                         }
                     }
 
@@ -4923,6 +5073,7 @@ ApplicationWindow {
                                     Label {
                                         text: modelData.parts + (modelData.parts === 1 ? " part" : " parts")
                                         font.pixelSize: 11; color: "#8a9199"
+                                        visible: !root.compactLayout
                                     }
                                     Label {
                                         text: Format.grouped(modelData.qty).replace(".00", "")
@@ -4932,6 +5083,7 @@ ApplicationWindow {
                                     // Share of total units, on a single-hue track.
                                     Rectangle {
                                         Layout.preferredWidth: 64; Layout.preferredHeight: 6
+                                        visible: !root.compactLayout
                                         radius: 3; color: "#eceff1"
                                         Rectangle {
                                             width: Math.max(2, parent.width * modelData.share)
@@ -4943,6 +5095,7 @@ ApplicationWindow {
                                         text: Math.round(modelData.share * 100) + "%"
                                         font.pixelSize: 11; color: "#5b6770"
                                         Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight
+                                        visible: !root.compactLayout
                                     }
                                 }
                             }
@@ -4956,11 +5109,15 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: "#e3e7ea" }
+                Rectangle {
+                    Layout.preferredWidth: 1; Layout.fillHeight: true; color: "#e3e7ea"
+                    visible: !root.compactLayout
+                }
 
                 // Distribution ring. Click a slice to filter, hover for the number.
                 Item {
-                    Layout.preferredWidth: 260; Layout.fillHeight: true
+                    Layout.preferredWidth: root.compactLayout ? 180 : 260
+                    Layout.fillHeight: true
 
                     Label {
                         id: donutTitle

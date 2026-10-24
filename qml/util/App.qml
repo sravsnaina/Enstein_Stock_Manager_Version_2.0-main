@@ -16,4 +16,7 @@ QtObject {
     // The application window's current size. Bound by Main.qml at startup.
     property int windowWidth: 1600
     property int windowHeight: 900
+    // Shrinks dialog text and row dimensions with short windows. The floor
+    // keeps controls usable on the smallest supported window.
+    readonly property real dialogScale: Math.max(0.7, Math.min(1.0, windowHeight / 900))
 }

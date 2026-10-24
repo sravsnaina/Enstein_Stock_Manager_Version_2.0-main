@@ -53,10 +53,10 @@ void ItemMasterService::load()
     qDebug() << "Loaded" << m_items.size() << "items in Item Master";
 }
 
-void ItemMasterService::save()
+bool ItemMasterService::save()
 {
-    if (!m_db) return;
-    m_db->replaceAll("item_master", appRowsToDb(kItemFields, m_items));
+    if (!m_db) return false;
+    return m_db->replaceAll("item_master", appRowsToDb(kItemFields, m_items));
 }
 
 bool ItemMasterService::add(QVariantMap itemDetails) 
@@ -67,16 +67,23 @@ bool ItemMasterService::add(QVariantMap itemDetails)
         return false;
     }
 
-    // Check duplicate
+    // The add form also serves as a quick edit form: entering an existing
+    // part number updates that row instead of creating a duplicate that the
+    // database primary key would reject.
     for (const auto &item : m_items) {
-        if (item["partNo"].toString().toLower() == partNo.trimmed().toLower()) {
-            //emit errorOccurred("Part '" + partNo + "' already exists in Item Master");
+        if (item.value("partNo").toString().trimmed().compare(partNo.trimmed(), Qt::CaseInsensitive) == 0) {
+            itemDetails["originalPartNo"] = item.value("partNo");
+            return update(itemDetails);
         }
     }
 
     normalizeItemClassification(itemDetails);
     m_items.append(itemDetails);
-    save();
+    if (!save()) {
+        m_items.removeLast();
+        emit errorOccurred("Could not save item to the database");
+        return false;
+    }
     emit listChanged();
     return true;
 }
@@ -156,7 +163,11 @@ bool ItemMasterService::update(QVariantMap itemDetails)
     QVariantMap previous = m_items[index];
     m_items[index] = updated;
 
-    save();
+    if (!save()) {
+        m_items[index] = previous;
+        emit errorOccurred("Could not save item changes to the database");
+        return false;
+    }
     emit listChanged();
     return true;
 }
@@ -178,8 +189,13 @@ bool ItemMasterService::removeByPartName(const QString &partName)
 {
     for (int i = 0; i < m_items.size(); ++i) {
         if (m_items[i]["partName"].toString().toLower() == partName.trimmed().toLower()) {
+            const QVariantMap removed = m_items[i];
             m_items.removeAt(i);
-            save();
+            if (!save()) {
+                m_items.insert(i, removed);
+                emit errorOccurred("Could not delete item from the database");
+                return false;
+            }
             emit listChanged();
             return true;
         }
